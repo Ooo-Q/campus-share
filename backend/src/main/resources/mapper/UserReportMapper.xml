@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.UserReportMapper">
+
+    <resultMap id="ReportResult" type="com.campusshare.entity.UserReport">
+        <id property="id" column="id"/>
+        <result property="reportedUserId" column="reported_user_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="reason" column="reason"/>
+        <result property="status" column="status"/>
+        <result property="reviewReply" column="review_reply"/>
+        <result property="reportedUsername" column="reported_username"/>
+        <result property="cancelled" column="cancelled"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="reviewedAt" column="reviewed_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="ReportResult">
+        SELECT ur.*, u.username AS reported_username
+        FROM user_report ur
+        LEFT JOIN sys_user u ON ur.reported_user_id = u.id
+        WHERE ur.id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="ReportResult">
+        SELECT ur.*, u.username AS reported_username
+        FROM user_report ur
+        LEFT JOIN sys_user u ON ur.reported_user_id = u.id
+        <if test="status != null and status != ''">
+            WHERE ur.status = #{status}
+        </if>
+        ORDER BY ur.created_at DESC
+    </select>
+
+    <select id="findByUserId" resultMap="ReportResult">
+        SELECT ur.*, u.username AS reported_username
+        FROM user_report ur
+        LEFT JOIN sys_user u ON ur.reported_user_id = u.id
+        WHERE ur.user_id = #{userId}
+        <if test="status != null and status != ''">
+            AND ur.status = #{status}
+        </if>
+        ORDER BY ur.created_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.UserReport" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_report(reported_user_id, user_id, reason, status, review_reply, cancelled, reported_username, created_at, reviewed_at)
+        VALUES (#{reportedUserId}, #{userId}, #{reason}, #{status}, #{reviewReply}, #{cancelled}, #{reportedUsername}, NOW(), #{reviewedAt})
+    </insert>
+
+    <update id="update" parameterType="com.campusshare.entity.UserReport">
+        UPDATE user_report
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="reviewReply != null">review_reply = #{reviewReply},</if>
+            <if test="reviewedAt != null">reviewed_at = #{reviewedAt},</if>
+            <if test="reason != null">reason = #{reason},</if>
+            <if test="cancelled != null">cancelled = #{cancelled},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper>
+

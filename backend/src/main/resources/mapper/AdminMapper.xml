@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.AdminMapper">
+
+    <select id="countPendingReports" resultType="long">
+        SELECT COUNT(*) FROM resource_report WHERE status = 'PENDING'
+    </select>
+
+    <select id="latestResources" resultMap="com.campusshare.mapper.ResourceMapper.ResourceResult">
+        SELECT r.id, r.title, r.category_id, c.name AS category_name, r.description,
+               r.file_url, r.owner_id, r.owner_name,
+               r.like_count, r.download_count, r.view_count,
+               r.allow_download, r.created_at, r.updated_at
+        FROM resource r
+        LEFT JOIN resource_category c ON r.category_id = c.id
+        ORDER BY r.created_at DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>
+
+

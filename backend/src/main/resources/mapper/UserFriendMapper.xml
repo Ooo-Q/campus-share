@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.UserFriendMapper">
+
+    <resultMap id="UserFriendResult" type="com.campusshare.entity.UserFriend">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="friendId" column="friend_id"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="find" resultMap="UserFriendResult">
+        SELECT * FROM user_friend
+        WHERE user_id = #{userId} AND friend_id = #{friendId}
+    </select>
+
+    <select id="findByUserId" resultMap="UserFriendResult">
+        SELECT * FROM user_friend
+        WHERE user_id = #{userId}
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.UserFriend" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_friend(user_id, friend_id, status, created_at, updated_at)
+        VALUES (#{userId}, #{friendId}, #{status}, NOW(), NOW())
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE user_friend
+        SET status = #{status}, updated_at = NOW()
+        WHERE user_id = #{userId} AND friend_id = #{friendId}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM user_friend
+        WHERE user_id = #{userId} AND friend_id = #{friendId}
+    </delete>
+
+    <delete id="deleteByUserId">
+        DELETE FROM user_friend WHERE user_id = #{userId} OR friend_id = #{userId}
+    </delete>
+
+</mapper>
+

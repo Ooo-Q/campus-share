@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.ResourceCommentMapper">
+
+    <resultMap id="CommentResult" type="com.campusshare.entity.ResourceComment">
+        <id property="id" column="id"/>
+        <result property="resourceId" column="resource_id"/>
+        <result property="rootId" column="root_id"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="isAnonymous" column="is_anonymous"/>
+        <result property="displayName" column="display_name"/>
+        <result property="avatar" column="avatar"/>
+        <result property="replyToUid" column="reply_to_uid"/>
+        <result property="replyToName" column="reply_to_name"/>
+        <result property="content" column="content"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.campusshare.entity.ResourceComment" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO resource_comment
+        (resource_id, root_id, parent_id, user_id, is_anonymous, display_name, avatar, reply_to_uid, reply_to_name, content, status, created_at, updated_at)
+        VALUES
+        (#{resourceId}, #{rootId}, #{parentId}, #{userId}, #{isAnonymous}, #{displayName}, #{avatar},
+         #{replyToUid}, #{replyToName}, #{content}, #{status}, NOW(), NOW())
+    </insert>
+
+    <select id="findById" resultMap="CommentResult">
+        SELECT * FROM resource_comment WHERE id = #{id}
+    </select>
+
+    <select id="listRoots" resultMap="CommentResult">
+        SELECT *
+        FROM resource_comment
+        WHERE resource_id = #{resourceId}
+          AND (parent_id IS NULL OR parent_id = 0)
+          AND status &lt;&gt; 'DELETED'
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="listByRootIds" resultMap="CommentResult">
+        SELECT *
+        FROM resource_comment
+        WHERE root_id IN
+        <foreach item="id" collection="rootIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+          AND parent_id IS NOT NULL
+          AND status &lt;&gt; 'DELETED'
+        ORDER BY created_at ASC
+    </select>
+
+    <update id="softDelete">
+        UPDATE resource_comment
+        SET status = 'DELETED',
+            content = '该评论已删除',
+            display_name = '已删除',
+            is_anonymous = 1,
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateRootId">
+        UPDATE resource_comment SET root_id = #{rootId} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteByResourceId">
+        DELETE FROM resource_comment WHERE resource_id = #{resourceId}
+    </delete>
+</mapper>
+

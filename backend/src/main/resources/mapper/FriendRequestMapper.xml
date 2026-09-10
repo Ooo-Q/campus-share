@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.FriendRequestMapper">
+
+    <resultMap id="FriendRequestResult" type="com.campusshare.entity.FriendRequest">
+        <id property="id" column="id"/>
+        <result property="fromUserId" column="from_user_id"/>
+        <result property="toUserId" column="to_user_id"/>
+        <result property="message" column="message"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="FriendRequestResult">
+        SELECT * FROM friend_request WHERE id = #{id}
+    </select>
+
+    <select id="findPending" resultMap="FriendRequestResult">
+        SELECT * FROM friend_request
+        WHERE from_user_id = #{fromUserId} AND to_user_id = #{toUserId} AND status = 'PENDING'
+        ORDER BY created_at DESC
+        LIMIT 1
+    </select>
+
+    <select id="findByToUserId" resultMap="FriendRequestResult">
+        SELECT * FROM friend_request
+        WHERE to_user_id = #{toUserId}
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findByFromUserId" resultMap="FriendRequestResult">
+        SELECT * FROM friend_request
+        WHERE from_user_id = #{fromUserId}
+        ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.FriendRequest" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO friend_request(from_user_id, to_user_id, message, status, created_at, updated_at)
+        VALUES (#{fromUserId}, #{toUserId}, #{message}, #{status}, NOW(), NOW())
+    </insert>
+
+    <update id="updateStatus">
+        UPDATE friend_request
+        SET status = #{status}, updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM friend_request WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByUserId">
+        DELETE FROM friend_request WHERE from_user_id = #{userId} OR to_user_id = #{userId}
+    </delete>
+
+</mapper>
+

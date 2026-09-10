@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.ResourceMapper">
+
+    <resultMap id="ResourceResult" type="com.campusshare.entity.Resource">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="categoryId" column="category_id"/>
+        <result property="categoryName" column="category_name"/>
+        <result property="description" column="description"/>
+        <result property="fileUrl" column="file_url"/>
+        <result property="ownerId" column="owner_id"/>
+        <result property="ownerName" column="owner_name"/>
+        <result property="likeCount" column="like_count"/>
+        <result property="downloadCount" column="download_count"/>
+        <result property="viewCount" column="view_count"/>
+        <result property="favoriteCount" column="favorite_count"/>
+        <result property="visibility" column="visibility"/>
+        <result property="allowDownload" column="allow_download"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="BaseColumns">
+        r.id, r.title, r.category_id, c.name AS category_name, r.description,
+        r.file_url, r.owner_id, r.owner_name,
+        r.like_count, r.download_count, r.view_count,
+        COALESCE(fav_count.favorite_count, 0) AS favorite_count,
+        r.visibility, r.allow_download,
+        r.created_at, r.updated_at
+    </sql>
+
+    <select id="findById" resultMap="ResourceResult">
+        SELECT <include refid="BaseColumns"/>
+        FROM resource r
+        LEFT JOIN resource_category c ON r.category_id = c.id
+        LEFT JOIN (
+            SELECT resource_id, COUNT(*) AS favorite_count
+            FROM resource_favorite
+            GROUP BY resource_id
+        ) fav_count ON r.id = fav_count.resource_id
+        WHERE r.id = #{id}
+    </select>
+
+    <select id="search" resultMap="ResourceResult">
+        SELECT <include refid="BaseColumns"/>
+        FROM resource r
+        LEFT JOIN resource_category c ON r.category_id = c.id
+        LEFT JOIN (
+            SELECT resource_id, COUNT(*) AS favorite_count
+            FROM resource_favorite
+            GROUP BY resource_id
+        ) fav_count ON r.id = fav_count.resource_id
+        <where>
+            <if test="categoryId != null">
+                r.category_id = #{categoryId}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (r.title LIKE CONCAT('%', #{keyword}, '%')
+                OR r.description LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="visibility != null and visibility != ''">
+                AND r.visibility = #{visibility}
+            </if>
+            <if test="ownerId != null">
+                AND r.owner_id = #{ownerId}
+            </if>
+        </where>
+        ORDER BY r.created_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.Resource" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO resource(
+            title, category_id, description, file_url,
+            owner_id, owner_name, like_count, download_count, view_count,
+            visibility, allow_download, created_at, updated_at
+        ) VALUES (
+            #{title}, #{categoryId}, #{description}, #{fileUrl},
+            #{ownerId}, #{ownerName}, #{likeCount}, #{downloadCount}, #{viewCount},
+            #{visibility}, #{allowDownload}, NOW(), NOW()
+        )
+    </insert>
+
+    <update id="update" parameterType="com.campusshare.entity.Resource">
+        UPDATE resource
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="categoryId != null">category_id = #{categoryId},</if>
+            <if test="description != null">description = #{description},</if>
+            <if test="fileUrl != null">file_url = #{fileUrl},</if>
+            <if test="ownerName != null">owner_name = #{ownerName},</if>
+            <if test="likeCount != null">like_count = #{likeCount},</if>
+            <if test="downloadCount != null">download_count = #{downloadCount},</if>
+            <if test="viewCount != null">view_count = #{viewCount},</if>
+            <if test="visibility != null">visibility = #{visibility},</if>
+            <if test="allowDownload != null">allow_download = #{allowDownload},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM resource WHERE id = #{id}
+    </delete>
+
+    <update id="incrementDownload">
+        UPDATE resource SET download_count = download_count + 1 WHERE id = #{id}
+    </update>
+
+    <update id="incrementView">
+        UPDATE resource SET view_count = view_count + 1 WHERE id = #{id}
+    </update>
+
+    <update id="updateVisibility">
+        UPDATE resource SET visibility = #{visibility}, updated_at = NOW() WHERE id = #{id}
+    </update>
+
+    <select id="countByOwner" resultType="int">
+        SELECT COUNT(*) FROM resource WHERE owner_id = #{ownerId}
+    </select>
+</mapper>
+

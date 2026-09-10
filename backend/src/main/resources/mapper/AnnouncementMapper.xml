@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.AnnouncementMapper">
+
+    <resultMap id="AnnouncementResult" type="com.campusshare.entity.Announcement">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="summary" column="summary"/>
+        <result property="content" column="content"/>
+        <result property="pinned" column="pinned"/>
+        <result property="publishAt" column="publish_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="AnnouncementResult">
+        SELECT * FROM announcement
+        <if test="keyword != null and keyword != ''">
+            WHERE title LIKE CONCAT('%', #{keyword}, '%')
+            OR summary LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        ORDER BY pinned DESC, publish_at DESC
+    </select>
+
+    <select id="findById" resultMap="AnnouncementResult">
+        SELECT * FROM announcement WHERE id = #{id}
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.Announcement" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO announcement(title, summary, content, pinned, publish_at, created_at, updated_at)
+        VALUES (#{title}, #{summary}, #{content}, #{pinned}, #{publishAt}, NOW(), NOW())
+    </insert>
+
+    <update id="update" parameterType="com.campusshare.entity.Announcement">
+        UPDATE announcement
+        <set>
+            <if test="title != null">title = #{title},</if>
+            <if test="summary != null">summary = #{summary},</if>
+            <if test="content != null">content = #{content},</if>
+            <if test="pinned != null">pinned = #{pinned},</if>
+            <if test="publishAt != null">publish_at = #{publishAt},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="delete">
+        DELETE FROM announcement WHERE id = #{id}
+    </delete>
+</mapper>
+

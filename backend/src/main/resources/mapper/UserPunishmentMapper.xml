@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.UserPunishmentMapper">
+
+    <resultMap id="PunishmentResult" type="com.campusshare.entity.UserPunishment">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="reportId" column="report_id"/>
+        <result property="resourceId" column="resource_id"/>
+        <result property="resourceTitle" column="resource_title"/>
+        <result property="reportedUserId" column="reported_user_id"/>
+        <result property="reportedUsername" column="reported_username"/>
+        <result property="punishmentType" column="punishment_type"/>
+        <result property="reason" column="reason"/>
+        <result property="duration" column="duration"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="status" column="status"/>
+        <result property="adminId" column="admin_id"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="PunishmentResult">
+        SELECT * FROM user_punishment WHERE id = #{id}
+    </select>
+
+    <select id="findByUserId" resultMap="PunishmentResult">
+        SELECT * FROM user_punishment
+        WHERE user_id = #{userId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findByUserIdAndStatus" resultMap="PunishmentResult">
+        SELECT * FROM user_punishment
+        WHERE user_id = #{userId}
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.UserPunishment" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_punishment(user_id, report_id, resource_id, resource_title, reported_user_id, reported_username, punishment_type, reason, duration, start_date, end_date, status, admin_id, created_at)
+        VALUES (#{userId}, #{reportId}, #{resourceId}, #{resourceTitle}, #{reportedUserId}, #{reportedUsername}, #{punishmentType}, #{reason}, #{duration}, #{startDate}, #{endDate}, #{status}, #{adminId}, NOW())
+    </insert>
+
+    <update id="update" parameterType="com.campusshare.entity.UserPunishment">
+        UPDATE user_punishment
+        <set>
+            <if test="status != null">status = #{status},</if>
+            <if test="endDate != null">end_date = #{endDate},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteByReportId">
+        DELETE FROM user_punishment WHERE report_id = #{reportId}
+    </delete>
+
+    <delete id="deleteByResourceId">
+        DELETE FROM user_punishment WHERE resource_id = #{resourceId}
+    </delete>
+
+    <select id="countActiveByType" resultType="int">
+        <![CDATA[
+        SELECT COUNT(1)
+        FROM user_punishment
+        WHERE user_id = #{userId}
+          AND punishment_type = #{type}
+          AND status = 'ACTIVE'
+          AND start_date <= #{now}
+          AND (end_date IS NULL OR end_date >= #{now})
+        ]]>
+    </select>
+</mapper>
+

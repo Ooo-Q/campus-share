@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.campusshare.mapper.ResourceLikeMapper">
+
+    <resultMap id="LikeResult" type="com.campusshare.entity.ResourceLike">
+        <id property="id" column="id"/>
+        <result property="resourceId" column="resource_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="find" resultMap="LikeResult">
+        SELECT * FROM resource_like
+        WHERE user_id = #{userId} AND resource_id = #{resourceId}
+    </select>
+
+    <select id="findByUser" resultMap="LikeResult">
+        SELECT * FROM resource_like
+        WHERE user_id = #{userId}
+        ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.campusshare.entity.ResourceLike" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO resource_like(resource_id, user_id, created_at)
+        VALUES (#{resourceId}, #{userId}, NOW())
+    </insert>
+
+    <delete id="delete">
+        DELETE FROM resource_like WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByUserAndResource">
+        DELETE FROM resource_like WHERE user_id = #{userId} AND resource_id = #{resourceId}
+    </delete>
+
+    <delete id="deleteByResourceId">
+        DELETE FROM resource_like WHERE resource_id = #{resourceId}
+    </delete>
+
+    <select id="countByResourceOwner" resultType="int">
+        SELECT COUNT(*) FROM resource_like rl
+        INNER JOIN resource r ON rl.resource_id = r.id
+        WHERE r.owner_id = #{ownerId}
+    </select>
+</mapper>
+
