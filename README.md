@@ -1,9 +1,10 @@
 # 校园资料分享平台
 
-前后端分离的高校资料上传 / 检索 / 下载 / 互动平台，含学生端与管理端。支持 JWT 鉴权、Redis 缓存、文件上传，并已通过 Docker + GitHub Actions 完成云服务器单机部署。
+个人独立开发的高校资料分享系统：资料上传、检索、下载与互动，包含学生端和管理端。前后端分离，后端统一提供 JSON 接口。
 
-**在线演示：** http://43.142.37.239  
-（个人云服务器，若无法访问可能为实例关机或网络问题）
+已接入 Redis 缓存，并使用 Docker + GitHub Actions 完成单服务器部署。
+
+**在线地址：** http://43.142.37.239
 
 ## 技术栈
 
@@ -13,68 +14,92 @@
 | 前端 | Vue 3、TypeScript、Vite、Element Plus、Pinia、Axios |
 | 部署 | Docker、Docker Compose、Nginx、GitHub Actions、GHCR |
 
-## 功能概览
+## 功能说明
 
-- 学生端：注册登录、资料浏览/上传/下载、评论互动、好友与私信等
-- 管理端：用户/资料/分类/公告/举报等管理
-- 工程能力：Redis 缓存资料列表、JWT 角色隔离、Compose 单机编排、CI 构建镜像
+**学生端**
 
-## 架构说明
+- 注册 / 登录
+- 资料浏览、搜索、上传、下载
+- 评论、点赞、收藏等互动
+- 好友、私信等
+
+**管理端**
+
+- 学生、资料、分类管理
+- 公告、举报处理等
+
+**其它**
+
+- JWT 登录鉴权，学生端与管理端角色隔离
+- Redis 缓存资料列表等读多写少接口
+- 文件上传到服务器本地目录，数据库只存访问路径
+
+## 系统结构
 
 ```text
 浏览器
-  → Nginx（web 容器，:80）
-      → 静态前端页面
-      → /api/* 反代至 Spring Boot（backend:8080）
-          → MySQL / Redis
-          → uploads 本地文件目录
+  → Nginx（80 端口）：返回前端页面，并把 /api 转给后端
+  → Spring Boot（8080）：业务接口
+  → MySQL：业务数据
+  → Redis：缓存
+  → uploads：上传文件
 ```
 
-- 开发环境：后端读 `application.yml`（默认 `localhost`）
-- 生产环境：Compose 用环境变量覆盖数据源 / Redis 主机名等，构建与运行分离
+本地开发时，后端默认连接本机 MySQL / Redis（见 `backend/src/main/resources/application.yml`）。  
+用 Docker 部署时，由 `docker-compose.yml` 和 `.env` 注入主机名、密码等配置。
 
-## 仓库结构
+## 目录说明
 
 ```text
-├── backend/                 # Spring Boot 后端
-│   └── Dockerfile
-├── frontend/                # Vue3 前端
-├── nginx/nginx.conf         # 反代入镜像
-├── Dockerfile.web           # 前端 + Nginx 镜像
-├── docker-compose.yml       # 生产编排（拉 GHCR 镜像）
-├── db/campus_share.sql      # 数据库初始化
-├── .github/workflows/       # Actions：构建并推送镜像
-├── docs/deploy.md           # 服务器部署说明
-└── .env.example             # 环境变量示例
+├── backend/                 后端源码与 Dockerfile
+├── frontend/                前端源码
+├── nginx/nginx.conf         Nginx 配置（打进 web 镜像）
+├── Dockerfile.web           前端构建 + Nginx 镜像
+├── docker-compose.yml       容器编排（拉取已构建镜像运行）
+├── db/campus_share.sql      数据库初始化脚本
+├── .github/workflows/       推送 main 后自动构建并推送镜像
+├── docs/deploy.md           如何在云服务器上部署 / 更新
+├── .env.example             环境变量示例
+└── uploads/                 上传文件目录（部署时挂载）
 ```
 
-## 本地开发（可选）
+## 演示账号
 
-### 环境要求
+密码均为：`123456`
+
+| 角色 | 用户名 | 密码 |
+|------|--------|------|
+| 管理员 | `admin` | `123456` |
+| 学生 | `student1` | `123456` |
+| 学生 | `student2` | `123456` |
+| 学生 | `student3` | `123456` |
+
+## 本地运行
+
+### 环境
 
 - JDK 21、Maven 3.9+
 - Node.js 18+
-- MySQL 8、Redis 7（可用 Docker 单独启动）
+- MySQL 8、Redis 7
 
-### 数据库
-
-创建库并导入：
+### 导入数据库
 
 ```bash
-# 示例
 mysql -u root -p < db/campus_share.sql
 ```
 
-### 后端
+按需修改 `application.yml` 中的数据库账号密码。
+
+### 启动后端
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-默认：`http://localhost:8080/api`
+接口根路径：`http://localhost:8080/api`
 
-### 前端
+### 启动前端
 
 ```bash
 cd frontend
@@ -82,41 +107,26 @@ npm install
 npm run dev
 ```
 
-默认：`http://localhost:5173`（开发代理转发 `/api`）
+访问：`http://localhost:5173`（开发环境会把 `/api` 代理到后端）
 
-## Docker 部署（推荐）
+## Docker 部署
 
-镜像由 GitHub Actions 在推送 `main` 后自动构建并推送到：
+推送到 GitHub `main` 后，Actions 会自动构建并推送镜像：
 
 - `ghcr.io/ooo-q/campus-share-backend:latest`
 - `ghcr.io/ooo-q/campus-share-web:latest`
 
-服务器侧只需 Compose 配置与数据初始化文件，拉取镜像启动即可。详细步骤见 [docs/deploy.md](docs/deploy.md)。
-
-简要流程：
+服务器上准备好 `docker-compose.yml`、`.env`、`db/campus_share.sql` 和 `uploads/` 后执行：
 
 ```bash
-mkdir -p ~/campus-share/db ~/campus-share/uploads && cd ~/campus-share
-# 下载 docker-compose.yml、.env、db/campus_share.sql 后：
 docker compose pull
 docker compose up -d
 ```
 
-## 演示账号
-
-以数据库初始化数据为准（密码以你本地/导入库中的账号为准）。常见测试账号包括：
-
-| 角色 | 用户名 | 说明 |
-|------|--------|------|
-| 管理员 | `admin` | 管理端 |
-| 学生 | `student1` 等 | 学生端 |
-
-> 若无法登录，请在库中核对或重置密码后再试。
+完整步骤、目录要求和更新方法见 **[docs/deploy.md](docs/deploy.md)**。
 
 ## 文档
 
-- [部署说明](docs/deploy.md)
-
-## License
-
-仅供学习与求职作品展示使用。
+| 文档 | 用途 |
+|------|------|
+| [docs/deploy.md](docs/deploy.md) | 讲如何把本系统部署到云服务器：要准备什么文件、怎么拉取镜像、怎么启动和更新。本地写代码不看这个；上服务器部署时看这个。 |
