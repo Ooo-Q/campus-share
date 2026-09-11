@@ -1,105 +1,115 @@
 # 校园资料分享平台
 
-个人独立开发的高校资料分享系统：资料上传、检索、下载与互动，包含学生端和管理端。前后端分离，后端统一提供 JSON 接口。
+高校场景下的资料分享系统。提供资料的上传、检索、下载与互动能力，包含学生端与管理端。采用前后端分离架构，后端以 JSON 接口对外提供服务。
 
-已接入 Redis 缓存，并使用 Docker + GitHub Actions 完成单服务器部署。
+系统使用 Redis 作为缓存，支持通过 Docker 与 GitHub Actions 进行单机部署。
 
-**在线地址：** http://43.142.37.239
+在线访问地址：http://43.142.37.239
 
-## 技术栈
+## 1. 技术栈
 
-| 层级 | 技术 |
+| 分类 | 内容 |
 |------|------|
 | 后端 | Java 21、Spring Boot 3、MyBatis、MySQL 8、Redis 7、JWT |
 | 前端 | Vue 3、TypeScript、Vite、Element Plus、Pinia、Axios |
 | 部署 | Docker、Docker Compose、Nginx、GitHub Actions、GHCR |
 
-## 功能说明
+## 2. 功能说明
 
-**学生端**
+### 2.1 学生端
 
-- 注册 / 登录
+- 用户注册与登录
 - 资料浏览、搜索、上传、下载
-- 评论、点赞、收藏等互动
-- 好友、私信等
+- 评论、点赞、收藏
+- 好友与私信
 
-**管理端**
+### 2.2 管理端
 
-- 学生、资料、分类管理
-- 公告、举报处理等
+- 学生管理
+- 资料与分类管理
+- 公告管理
+- 举报处理
 
-**其它**
+### 2.3 其它能力
 
-- JWT 登录鉴权，学生端与管理端角色隔离
-- Redis 缓存资料列表等读多写少接口
-- 文件上传到服务器本地目录，数据库只存访问路径
+- 基于 JWT 的身份认证与角色校验
+- 基于 Redis 的接口缓存
+- 文件上传至本地目录，数据库保存访问路径
 
-## 系统结构
-
-```text
-浏览器
-  → Nginx（80 端口）：返回前端页面，并把 /api 转给后端
-  → Spring Boot（8080）：业务接口
-  → MySQL：业务数据
-  → Redis：缓存
-  → uploads：上传文件
-```
-
-本地开发时，后端默认连接本机 MySQL / Redis（见 `backend/src/main/resources/application.yml`）。  
-用 Docker 部署时，由 `docker-compose.yml` 和 `.env` 注入主机名、密码等配置。
-
-## 目录说明
+## 3. 系统组成
 
 ```text
-├── backend/                 后端源码与 Dockerfile
-├── frontend/                前端源码
-├── nginx/nginx.conf         Nginx 配置（打进 web 镜像）
-├── Dockerfile.web           前端构建 + Nginx 镜像
-├── docker-compose.yml       容器编排（拉取已构建镜像运行）
-├── db/campus_share.sql      数据库初始化脚本
-├── .github/workflows/       推送 main 后自动构建并推送镜像
-├── docs/deploy.md           如何在云服务器上部署 / 更新
-├── .env.example             环境变量示例
-└── uploads/                 上传文件目录（部署时挂载）
+客户端浏览器
+    │
+    ▼
+Nginx（80）
+    ├── 静态前端资源
+    └── /api 反向代理
+            │
+            ▼
+        Spring Boot（8080）
+            ├── MySQL
+            ├── Redis
+            └── uploads 文件目录
 ```
 
-## 演示账号
+本地开发时，后端默认读取 `backend/src/main/resources/application.yml`，数据库与 Redis 地址为 `localhost`。  
+使用 Docker Compose 部署时，通过环境变量覆盖数据源、Redis 等连接配置。
 
-密码均为：`123456`
+## 4. 目录结构
+
+```text
+├── backend/                      后端工程及 Dockerfile
+├── frontend/                     前端工程
+├── nginx/nginx.conf              Nginx 配置文件
+├── Dockerfile.web                前端构建与 Nginx 镜像定义
+├── docker-compose.yml            容器编排文件
+├── db/campus_share.sql           数据库初始化脚本
+├── .github/workflows/            镜像构建与推送工作流
+├── docs/deploy.md                部署说明
+├── .env.example                  环境变量示例
+└── uploads/                      上传文件目录
+```
+
+## 5. 测试账号
+
+以下账号密码均为 `123456`。
 
 | 角色 | 用户名 | 密码 |
 |------|--------|------|
-| 管理员 | `admin` | `123456` |
-| 学生 | `student1` | `123456` |
-| 学生 | `student2` | `123456` |
-| 学生 | `student3` | `123456` |
+| 管理员 | admin | 123456 |
+| 学生 | student1 | 123456 |
+| 学生 | student2 | 123456 |
+| 学生 | student3 | 123456 |
 
-## 本地运行
+## 6. 本地运行
 
-### 环境
+### 6.1 环境要求
 
-- JDK 21、Maven 3.9+
-- Node.js 18+
-- MySQL 8、Redis 7
+- JDK 21
+- Maven 3.9 及以上
+- Node.js 18 及以上
+- MySQL 8
+- Redis 7
 
-### 导入数据库
+### 6.2 初始化数据库
 
 ```bash
 mysql -u root -p < db/campus_share.sql
 ```
 
-按需修改 `application.yml` 中的数据库账号密码。
+根据实际环境修改 `application.yml` 中的数据库连接信息。
 
-### 启动后端
+### 6.3 启动后端
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-接口根路径：`http://localhost:8080/api`
+服务地址：`http://localhost:8080/api`
 
-### 启动前端
+### 6.4 启动前端
 
 ```bash
 cd frontend
@@ -107,26 +117,27 @@ npm install
 npm run dev
 ```
 
-访问：`http://localhost:5173`（开发环境会把 `/api` 代理到后端）
+访问地址：`http://localhost:5173`  
+开发模式下，前端将 `/api` 请求代理至后端服务。
 
-## Docker 部署
+## 7. 容器化部署
 
-推送到 GitHub `main` 后，Actions 会自动构建并推送镜像：
+将代码推送至仓库 `main` 分支后，GitHub Actions 自动构建并推送镜像：
 
 - `ghcr.io/ooo-q/campus-share-backend:latest`
 - `ghcr.io/ooo-q/campus-share-web:latest`
 
-服务器上准备好 `docker-compose.yml`、`.env`、`db/campus_share.sql` 和 `uploads/` 后执行：
+服务器侧准备 `docker-compose.yml`、`.env`、`db/campus_share.sql` 与 `uploads` 目录后执行：
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-完整步骤、目录要求和更新方法见 **[docs/deploy.md](docs/deploy.md)**。
+部署步骤详见 [docs/deploy.md](docs/deploy.md)。
 
-## 文档
+## 8. 相关文档
 
-| 文档 | 用途 |
+| 文档 | 说明 |
 |------|------|
-| [docs/deploy.md](docs/deploy.md) | 讲如何把本系统部署到云服务器：要准备什么文件、怎么拉取镜像、怎么启动和更新。本地写代码不看这个；上服务器部署时看这个。 |
+| [docs/deploy.md](docs/deploy.md) | 服务器部署、更新与运维命令说明 |
