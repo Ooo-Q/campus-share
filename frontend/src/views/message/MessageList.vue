@@ -1,15 +1,40 @@
 <script setup lang="ts">
 import { onMounted, ref, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { ChatDotRound, User, UserFilled, Check, Close, Delete } from '@element-plus/icons-vue'
+import {
+  NAvatar,
+  NBadge,
+  NButton,
+  NEmpty,
+  NIcon,
+  NSpin,
+  NTabPane,
+  NTabs,
+  NTag,
+} from 'naive-ui'
+import {
+  ChatbubbleEllipsesOutline,
+  CheckmarkOutline,
+  CloseOutline,
+  PersonOutline,
+  PeopleOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
 import { getConversations, getUnreadCount, type Conversation } from '../../api/message'
-import { getAllRequests, acceptFriendRequest, rejectFriendRequest, deleteRequest, type FriendRequest } from '../../api/friend'
+import {
+  getAllRequests,
+  acceptFriendRequest,
+  rejectFriendRequest,
+  deleteRequest,
+  type FriendRequest,
+} from '../../api/friend'
 import { getAvatarUrl } from '../../utils/resource'
 import {
   acknowledgeIncomingFriendRequestIds,
   pendingIncomingFriendRequestsNotAcknowledged,
 } from '../../utils/friendRequestReminder'
+import { message } from '../../utils/feedback'
+import PageHeader from '../../components/PageHeader.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -22,7 +47,11 @@ const unreadCount = ref(0)
 let timer: number | null = null
 
 const isAdminRoute = computed(() => {
-  return route.meta.admin || route.matched.some((record: any) => record.meta.admin) || route.path.startsWith('/admin')
+  return (
+    route.meta.admin ||
+    route.matched.some((record: any) => record.meta.admin) ||
+    route.path.startsWith('/admin')
+  )
 })
 
 const reminderRole = computed(() => (isAdminRoute.value ? 'admin' : 'student') as 'admin' | 'student')
@@ -32,7 +61,7 @@ const pendingRequestsCount = computed(() =>
 )
 
 function noteFriendRequestsTabSeen() {
-  const ids = friendRequests.value.filter(r => r.status === 'PENDING' && !r.isFromMe).map(r => r.id)
+  const ids = friendRequests.value.filter((r) => r.status === 'PENDING' && !r.isFromMe).map((r) => r.id)
   acknowledgeIncomingFriendRequestIds(ids, reminderRole.value)
 }
 
@@ -43,7 +72,7 @@ async function loadConversations() {
     conversations.value = res.data || []
     await loadUnreadCount()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '加载失败')
+    message.error(e.response?.data?.message || '加载失败')
   } finally {
     loading.value = false
   }
@@ -55,7 +84,7 @@ async function loadFriendRequests() {
     const res = await getAllRequests()
     friendRequests.value = res.data || []
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '加载失败')
+    message.error(e.response?.data?.message || '加载失败')
   } finally {
     requestsLoading.value = false
   }
@@ -65,37 +94,38 @@ async function loadUnreadCount() {
   try {
     const res = await getUnreadCount()
     unreadCount.value = res.data || 0
-  } catch (e) {
+  } catch {
+    // ignore
   }
 }
 
 async function handleAccept(request: FriendRequest) {
   try {
     await acceptFriendRequest(request.id)
-    ElMessage.success('已接受')
+    message.success('已接受')
     await loadFriendRequests()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '操作失败')
+    message.error(e.response?.data?.message || '操作失败')
   }
 }
 
 async function handleReject(request: FriendRequest) {
   try {
     await rejectFriendRequest(request.id)
-    ElMessage.success('已拒绝')
+    message.success('已拒绝')
     await loadFriendRequests()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '操作失败')
+    message.error(e.response?.data?.message || '操作失败')
   }
 }
 
 async function handleDelete(request: FriendRequest) {
   try {
     await deleteRequest(request.id)
-    ElMessage.success('已删除')
+    message.success('已删除')
     await loadFriendRequests()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '删除失败')
+    message.error(e.response?.data?.message || '删除失败')
   }
 }
 
@@ -110,21 +140,22 @@ function handleViewProfile(request: FriendRequest) {
   }
 }
 
-function handleTabChange(tab: string) {
-  activeTab.value = tab
-  router.replace({ query: { tab } })
+function handleTabChange(tab: string | number) {
+  const name = String(tab)
+  activeTab.value = name
+  router.replace({ query: { tab: name } })
 
   if (timer) {
     clearInterval(timer)
     timer = null
   }
-  
-  if (tab === 'chat') {
+
+  if (name === 'chat') {
     if (conversations.value.length === 0) {
       loadConversations()
     }
     timer = window.setInterval(loadConversations, 30000)
-  } else if (tab === 'requests') {
+  } else if (name === 'requests') {
     void loadFriendRequests().then(() => noteFriendRequestsTabSeen())
   }
 }
@@ -156,7 +187,6 @@ onMounted(() => {
   if (route.query.tab) {
     activeTab.value = route.query.tab as string
   }
-  // 无论当前在哪个 Tab，都拉取好友申请，这样「好友申请」角标在聊天页也能显示
   void loadFriendRequests().then(() => {
     if (activeTab.value === 'requests') {
       noteFriendRequestsTabSeen()
@@ -166,7 +196,7 @@ onMounted(() => {
     loadConversations()
     timer = window.setInterval(loadConversations, 30000)
   } else if (activeTab.value === 'requests') {
-    // 列表已在上面加载
+    // list already loading
   } else {
     loadConversations()
     timer = window.setInterval(loadConversations, 30000)
@@ -174,38 +204,39 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (timer) {
-    clearInterval(timer)
-  }
+  if (timer) clearInterval(timer)
 })
 </script>
 
 <template>
   <div class="message-list-page">
-    <el-card>
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-        <el-tab-pane label="聊天" name="chat">
-          <template #label>
-            <span style="display: flex; align-items: center; gap: 8px">
-              <el-icon><ChatDotRound /></el-icon>
+    <PageHeader title="消息" subtitle="会话列表与好友申请" />
+
+    <div class="panel glass-panel-strong">
+      <NTabs v-model:value="activeTab" type="segment" animated @update:value="handleTabChange">
+        <NTabPane name="chat">
+          <template #tab>
+            <span class="tab-label">
+              <NIcon :component="ChatbubbleEllipsesOutline" :size="16" />
               聊天
-              <el-badge v-if="unreadCount > 0" :value="unreadCount" class="tab-badge" />
+              <NBadge v-if="unreadCount > 0" :value="unreadCount" :max="99" />
             </span>
           </template>
-          <div v-loading="loading">
-            <div v-if="conversations.length === 0" class="empty-state">
-              <el-empty description="暂无消息" />
+          <NSpin :show="loading">
+            <div v-if="conversations.length === 0" class="empty-wrap">
+              <NEmpty description="暂无消息" />
             </div>
             <div v-else class="conversations-list">
-              <div
+              <button
                 v-for="conv in conversations"
                 :key="conv.userId"
-                class="conversation-item"
+                type="button"
+                class="conversation-item surface-card"
                 @click="handleChat(conv)"
               >
-                <el-avatar :size="56" :src="getAvatarUrl(conv.avatar)">
-                  <el-icon :size="28"><User /></el-icon>
-                </el-avatar>
+                <NAvatar round :size="52" :src="getAvatarUrl(conv.avatar) || undefined">
+                  <NIcon :size="24" :component="PersonOutline" />
+                </NAvatar>
                 <div class="conversation-info">
                   <div class="conversation-header">
                     <span class="conversation-name">{{ conv.nickname || conv.username }}</span>
@@ -213,114 +244,145 @@ onUnmounted(() => {
                   </div>
                   <div class="conversation-preview">
                     <span class="preview-text">{{ conv.lastMessage || '暂无消息' }}</span>
-                    <el-badge v-if="conv.unreadCount > 0" :value="conv.unreadCount" class="unread-badge" />
+                    <NBadge v-if="conv.unreadCount > 0" :value="conv.unreadCount" :max="99" />
                   </div>
                 </div>
-              </div>
+              </button>
             </div>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane label="好友申请" name="requests">
-          <template #label>
-            <span style="display: flex; align-items: center; gap: 8px">
-              <el-icon><UserFilled /></el-icon>
+          </NSpin>
+        </NTabPane>
+
+        <NTabPane name="requests">
+          <template #tab>
+            <span class="tab-label">
+              <NIcon :component="PeopleOutline" :size="16" />
               好友申请
-              <el-badge v-if="pendingRequestsCount > 0" :value="pendingRequestsCount" class="tab-badge" />
+              <NBadge v-if="pendingRequestsCount > 0" :value="pendingRequestsCount" :max="99" />
             </span>
           </template>
-          <div v-loading="requestsLoading">
-            <div v-if="friendRequests.length === 0" class="empty-state">
-              <el-empty description="暂无好友申请" />
+          <NSpin :show="requestsLoading">
+            <div v-if="friendRequests.length === 0" class="empty-wrap">
+              <NEmpty description="暂无好友申请" />
             </div>
             <div v-else class="requests-list">
-              <div v-for="request in friendRequests" :key="request.id" class="request-item">
-                <el-avatar :size="56" :src="getAvatarUrl(request.isFromMe ? request.toAvatar : request.fromAvatar)" @click="handleViewProfile(request)" style="cursor: pointer">
-                  <el-icon :size="28"><User /></el-icon>
-                </el-avatar>
+              <div v-for="request in friendRequests" :key="request.id" class="request-item surface-card">
+                <NAvatar
+                  round
+                  :size="52"
+                  :src="
+                    getAvatarUrl(request.isFromMe ? request.toAvatar : request.fromAvatar) || undefined
+                  "
+                  class="clickable"
+                  @click="handleViewProfile(request)"
+                >
+                  <NIcon :size="24" :component="PersonOutline" />
+                </NAvatar>
                 <div class="request-info">
                   <div class="request-header">
-                    <div class="request-name" @click="handleViewProfile(request)" style="cursor: pointer">
-                      {{ request.isFromMe ? (request.toNickname || request.toUsername) : (request.fromNickname || request.fromUsername) }}
+                    <div class="request-name clickable" @click="handleViewProfile(request)">
+                      {{
+                        request.isFromMe
+                          ? request.toNickname || request.toUsername
+                          : request.fromNickname || request.fromUsername
+                      }}
                     </div>
-                    <el-tag v-if="request.status === 'PENDING'" type="warning" size="small">
+                    <NTag v-if="request.status === 'PENDING'" type="warning" size="small" round>
                       {{ request.isFromMe ? '待对方处理' : '待处理' }}
-                    </el-tag>
-                    <el-tag v-else-if="request.status === 'ACCEPTED'" type="success" size="small">已通过</el-tag>
-                    <el-tag v-else-if="request.status === 'REJECTED'" type="danger" size="small">已拒绝</el-tag>
+                    </NTag>
+                    <NTag v-else-if="request.status === 'ACCEPTED'" type="success" size="small" round>
+                      已通过
+                    </NTag>
+                    <NTag v-else-if="request.status === 'REJECTED'" type="error" size="small" round>
+                      已拒绝
+                    </NTag>
                   </div>
                   <div class="request-username">
                     {{ request.isFromMe ? request.toUsername : request.fromUsername }}
-                    <span v-if="request.isFromMe" class="request-direction">（我发出的）</span>
-                    <span v-else class="request-direction">（收到的）</span>
+                    <span class="request-direction">
+                      {{ request.isFromMe ? '（我发出的）' : '（收到的）' }}
+                    </span>
                   </div>
                   <div v-if="request.message" class="request-message">{{ request.message }}</div>
                   <div class="request-time">{{ new Date(request.createdAt).toLocaleString('zh-CN') }}</div>
                 </div>
                 <div class="request-actions">
                   <template v-if="request.status === 'PENDING' && !request.isFromMe">
-                    <el-button type="success" @click="handleAccept(request)">
-                      <el-icon><Check /></el-icon>
+                    <NButton type="success" size="small" @click="handleAccept(request)">
+                      <template #icon>
+                        <NIcon :component="CheckmarkOutline" />
+                      </template>
                       接受
-                    </el-button>
-                    <el-button type="danger" @click="handleReject(request)">
-                      <el-icon><Close /></el-icon>
+                    </NButton>
+                    <NButton type="error" size="small" @click="handleReject(request)">
+                      <template #icon>
+                        <NIcon :component="CloseOutline" />
+                      </template>
                       拒绝
-                    </el-button>
+                    </NButton>
                   </template>
-                  <el-button type="info" plain @click="handleDelete(request)">
-                    <el-icon><Delete /></el-icon>
+                  <NButton secondary size="small" @click="handleDelete(request)">
+                    <template #icon>
+                      <NIcon :component="TrashOutline" />
+                    </template>
                     删除
-                  </el-button>
+                  </NButton>
                 </div>
               </div>
             </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+          </NSpin>
+        </NTabPane>
+      </NTabs>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .message-list-page {
-  max-width: 1400px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
+  padding: clamp(12px, 2vw, 28px);
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
+.panel {
+  padding: 18px 20px 22px;
+}
+
+.tab-label {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
 }
 
-.empty-state {
-  padding: 40px;
+.empty-wrap {
+  padding: 48px 16px;
 }
 
 .conversations-list {
   display: flex;
   flex-direction: column;
+  gap: 10px;
 }
 
 .conversation-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid #f3f4f6;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--m-stroke);
+  background: rgba(255, 255, 255, 0.72);
+  border-radius: var(--m-radius-sm);
   cursor: pointer;
-  transition: background 0.2s;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
 }
 
 .conversation-item:hover {
-  background: #f9fafb;
-}
-
-.conversation-item:last-child {
-  border-bottom: none;
+  transform: translateY(-1px);
+  box-shadow: var(--m-shadow-soft);
+  border-color: rgba(122, 158, 142, 0.35);
 }
 
 .conversation-info {
@@ -332,66 +394,60 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-bottom: 6px;
 }
 
 .conversation-name {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--m-ink);
 }
 
 .conversation-time {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--m-ink-muted);
+  flex-shrink: 0;
 }
 
 .conversation-preview {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
 }
 
 .preview-text {
   font-size: 14px;
-  color: #6b7280;
+  color: var(--m-ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
 }
 
-.unread-badge {
-  margin-left: 8px;
-}
-
-.tab-badge {
-  margin-left: 4px;
-}
-
 .requests-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .request-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 20px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 16px 18px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .request-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
+  border-color: rgba(122, 158, 142, 0.35);
+  box-shadow: var(--m-shadow-soft);
 }
 
 .request-info {
   flex: 1;
+  min-width: 0;
 }
 
 .request-header {
@@ -399,44 +455,59 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .request-name {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--m-ink);
 }
 
 .request-username {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: 13px;
+  color: var(--m-ink-soft);
   margin-bottom: 8px;
 }
 
 .request-direction {
-  color: #9ca3af;
+  color: var(--m-ink-muted);
   font-size: 12px;
-  margin-left: 4px;
 }
 
 .request-message {
   font-size: 14px;
-  color: #374151;
+  color: var(--m-ink);
   margin-bottom: 8px;
-  padding: 8px;
-  background: #f9fafb;
-  border-radius: 6px;
+  padding: 10px 12px;
+  background: rgba(216, 230, 222, 0.45);
+  border-radius: 14px;
 }
 
 .request-time {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--m-ink-muted);
 }
 
 .request-actions {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .request-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .request-actions {
+    justify-content: flex-start;
+  }
 }
 </style>
-

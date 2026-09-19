@@ -1,10 +1,27 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Document, Check, DocumentDelete, Delete } from '@element-plus/icons-vue'
+import {
+  NButton,
+  NForm,
+  NFormItem,
+  NInput,
+  NSelect,
+  NSwitch,
+  NUpload,
+  NIcon,
+  NSpace,
+  type UploadFileInfo,
+} from 'naive-ui'
+import {
+  CheckmarkCircleOutline,
+  DocumentOutline,
+  DocumentTextOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
 import { fetchCategories, type Category } from '../api/category'
 import { createResource, uploadFile, updateResource, fetchResourceDetail } from '../api/resource'
+import { message } from '../utils/feedback'
 import PageHeader from '../components/PageHeader.vue'
 
 const route = useRoute()
@@ -12,7 +29,7 @@ const router = useRouter()
 
 const form = reactive({
   title: '',
-  categoryId: undefined as number | undefined,
+  categoryId: null as number | null,
   description: '',
   fileUrl: '',
   allowDownload: true,
@@ -28,14 +45,19 @@ const isEditMode = ref(false)
 const fileChanged = ref(false)
 const originalFileUrl = ref('')
 
+const categoryOptions = ref<{ label: string; value: number }[]>([])
+
 async function loadCategories() {
   const res = await fetchCategories()
   categories.value = res.data
+  categoryOptions.value = (res.data || []).map((c) => ({ label: c.name, value: c.id }))
 }
 
-function handleFileChange(file: any) {
-  pendingFile.value = file.raw || file
-  fileName.value = pendingFile.value?.name || ''
+function handleFileChange(options: { file: UploadFileInfo; fileList: UploadFileInfo[] }) {
+  const raw = options.file.file
+  if (!raw) return
+  pendingFile.value = raw
+  fileName.value = raw.name || ''
   fileChanged.value = true
 }
 
@@ -44,7 +66,7 @@ function handleRemoveFile() {
   fileName.value = ''
   pendingFile.value = null
   fileChanged.value = true
-  ElMessage.info('已标记删除文件，保存后将移除文件')
+  message.info('已标记删除文件，保存后将移除文件')
 }
 
 async function loadResource(id: number) {
@@ -67,14 +89,14 @@ async function loadResource(id: number) {
 
     fileChanged.value = false
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '加载资料失败')
+    message.error(error.response?.data?.message || '加载资料失败')
     router.back()
   }
 }
 
 async function handleSubmit() {
   if (!form.title || !form.categoryId) {
-    ElMessage.warning('请填写标题和选择分类')
+    message.warning('请填写标题和选择分类')
     return
   }
 
@@ -82,7 +104,7 @@ async function handleSubmit() {
     const hasFile = !!form.fileUrl || !!pendingFile.value
     const hasDesc = !!form.description
     if (!hasFile && !hasDesc) {
-      ElMessage.warning('请上传文件或填写资料说明')
+      message.warning('请上传文件或填写资料说明')
       return
     }
 
@@ -90,7 +112,7 @@ async function handleSubmit() {
       form.categoryId = categories.value[0]!.id
     }
     if (!form.categoryId) {
-      ElMessage.warning('请选择分类')
+      message.warning('请选择分类')
       return
     }
   }
@@ -116,10 +138,10 @@ async function handleSubmit() {
         fileUrl: form.fileUrl,
         allowDownload: form.allowDownload,
       })
-      ElMessage.success('上传成功')
+      message.success('上传成功')
       Object.assign(form, {
         title: '',
-        categoryId: undefined,
+        categoryId: null,
         description: '',
         fileUrl: '',
         allowDownload: true,
@@ -144,11 +166,11 @@ async function handleSubmit() {
       }
 
       await updateResource(resourceId.value!, updateData)
-      ElMessage.success('修改成功')
+      message.success('修改成功')
       router.back()
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || (isEditMode.value ? '修改失败' : '上传失败'))
+    message.error(error.response?.data?.message || (isEditMode.value ? '修改失败' : '上传失败'))
   } finally {
     uploading.value = false
     saving.value = false
@@ -168,87 +190,105 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="upload-page">
+  <div class="page">
     <PageHeader :title="isEditMode ? '修改资料' : '上传学习资料'" />
-    <el-card>
-      <el-form label-width="90px">
-      <el-form-item :label="isEditMode ? '资料标题' : '资料标题'" :required="isEditMode">
-        <el-input v-model="form.title" maxlength="100" show-word-limit placeholder="请输入资料标题" />
-      </el-form-item>
-      <el-form-item label="分类" required>
-        <el-select v-model="form.categoryId" placeholder="请选择分类" class="category-select">
-          <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="资料说明">
-        <el-input v-model="form.description" type="textarea" :rows="4" placeholder="请输入资料说明" />
-      </el-form-item>
-      <el-form-item label="文件">
-        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-          <el-upload
-            :show-file-list="false"
-            :auto-upload="false"
-            :on-change="handleFileChange"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.rar,.txt,.xls,.xlsx"
-          >
-            <el-button :loading="uploading || saving" type="primary" size="small">选择{{ isEditMode ? '新' : '' }}文件</el-button>
-          </el-upload>
-          <template v-if="fileName && fileChanged">
-            <span style="color: #67c23a; display: inline-flex; align-items: center; gap: 4px;">
-              <el-icon><Check /></el-icon>
+
+    <div class="glass-panel form-panel">
+      <NForm label-placement="top">
+        <NFormItem :label="isEditMode ? '资料标题' : '资料标题'" :required="isEditMode">
+          <NInput
+            v-model:value="form.title"
+            maxlength="100"
+            show-count
+            placeholder="请输入资料标题"
+          />
+        </NFormItem>
+        <NFormItem label="分类" required>
+          <NSelect
+            v-model:value="form.categoryId"
+            :options="categoryOptions"
+            placeholder="请选择分类"
+            class="category-select"
+          />
+        </NFormItem>
+        <NFormItem label="资料说明">
+          <NInput
+            v-model:value="form.description"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入资料说明"
+          />
+        </NFormItem>
+        <NFormItem label="文件">
+          <div class="file-area">
+            <NUpload
+              :default-upload="false"
+              :show-file-list="false"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.rar,.txt,.xls,.xlsx"
+              @change="handleFileChange"
+            >
+              <NButton :loading="uploading || saving" type="primary" secondary>
+                选择{{ isEditMode ? '新' : '' }}文件
+              </NButton>
+            </NUpload>
+
+            <div v-if="fileName && fileChanged" class="file-status ok">
+              <NIcon :component="CheckmarkCircleOutline" />
               <span>新文件: {{ fileName }}</span>
-            </span>
-          </template>
-          <template v-else-if="form.fileUrl && !fileChanged && isEditMode">
-            <span style="color: #909399; display: inline-flex; align-items: center; gap: 4px;">
-              <el-icon><Document /></el-icon>
+            </div>
+            <div v-else-if="form.fileUrl && !fileChanged && isEditMode" class="file-status muted">
+              <NIcon :component="DocumentOutline" />
               <span>当前文件: {{ form.fileUrl.split('/').pop() }}</span>
-            </span>
-          </template>
-          <template v-else-if="!form.fileUrl && fileChanged && isEditMode">
-            <span style="color: #f56c6c; display: inline-flex; align-items: center; gap: 4px;">
-              <el-icon><DocumentDelete /></el-icon>
+            </div>
+            <div v-else-if="!form.fileUrl && fileChanged && isEditMode" class="file-status danger">
+              <NIcon :component="DocumentTextOutline" />
               <span>已标记删除文件</span>
-            </span>
-          </template>
-          <template v-else-if="!form.fileUrl && !fileName && !isEditMode">
-            <span style="color: #909399; display: inline-flex; align-items: center; gap: 4px;">
-              <el-icon><DocumentDelete /></el-icon>
+            </div>
+            <div v-else-if="!form.fileUrl && !fileName && !isEditMode" class="file-status muted">
+              <NIcon :component="DocumentTextOutline" />
               <span>未选择文件</span>
-            </span>
-          </template>
-          <el-button 
-            v-if="form.fileUrl || fileName" 
-            type="danger" 
-            size="small" 
-            plain
-            @click="handleRemoveFile"
-          >
-            <el-icon><Delete /></el-icon> 删除文件
-          </el-button>
-        </div>
-        <div v-if="isEditMode" style="margin-top: 8px; font-size: 12px; color: #909399; line-height: 1.5;">
-          提示：不选择新文件将保持原有文件不变
-        </div>
-      </el-form-item>
-      <el-form-item label="允许下载">
-        <el-switch v-model="form.allowDownload" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" :loading="saving" @click="handleSubmit">{{ isEditMode ? '保存修改' : '提交' }}</el-button>
-        <el-button v-if="isEditMode" @click="router.back()">取消</el-button>
-      </el-form-item>
-    </el-form>
-    </el-card>
+            </div>
+
+            <NButton
+              v-if="form.fileUrl || fileName"
+              type="error"
+              secondary
+              size="small"
+              @click="handleRemoveFile"
+            >
+              <template #icon><NIcon :component="TrashOutline" /></template>
+              删除文件
+            </NButton>
+          </div>
+          <p v-if="isEditMode" class="hint muted">提示：不选择新文件将保持原有文件不变</p>
+        </NFormItem>
+        <NFormItem label="允许下载">
+          <NSwitch v-model:value="form.allowDownload" />
+        </NFormItem>
+        <NFormItem>
+          <NSpace>
+            <NButton type="primary" :loading="saving" @click="handleSubmit">
+              {{ isEditMode ? '保存修改' : '提交' }}
+            </NButton>
+            <NButton v-if="isEditMode" @click="router.back()">取消</NButton>
+          </NSpace>
+        </NFormItem>
+      </NForm>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.upload-page {
-  max-width: min(800px, 100%);
+.page {
+  max-width: 720px;
   margin: 0 auto;
   width: 100%;
+  padding: clamp(12px, 2vw, 24px);
   box-sizing: border-box;
+}
+
+.form-panel {
+  padding: 24px;
 }
 
 .category-select {
@@ -256,51 +296,38 @@ onMounted(async () => {
   max-width: 300px;
 }
 
-.el-form {
+.file-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   width: 100%;
 }
 
-.el-form-item {
-  width: 100%;
+.file-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
-.el-input,
-.el-textarea,
-.el-select {
-  width: 100%;
-  max-width: 100%;
+.file-status.ok {
+  color: var(--m-sage-deep);
+}
+
+.file-status.danger {
+  color: var(--m-terracotta);
+}
+
+.hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 @media (max-width: 480px) {
-  .upload-page {
-    padding: 0;
-  }
-  
   .category-select {
     max-width: 100%;
   }
-  
-  :deep(.el-form-item__label) {
-    font-size: 14px;
-    width: 80px !important;
-  }
-  
-  :deep(.el-form-item__content) {
-    margin-left: 80px !important;
-  }
-}
-
-@media (min-width: 481px) and (max-width: 768px) {
-  .category-select {
-    max-width: 250px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .upload-page {
-    max-width: 900px;
-  }
 }
 </style>
-
-

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { User, Message, Lock } from '@element-plus/icons-vue'
+import { NButton, NForm, NFormItem, NInput, NIcon } from 'naive-ui'
+import { PersonOutline, MailOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { message } from '../utils/feedback'
 import { register } from '../api/auth'
 import { useUserStore } from '../stores/user'
 
@@ -19,11 +20,11 @@ const form = reactive({
 
 async function handleSubmit() {
   if (!form.username || !form.password || !form.nickname) {
-    ElMessage.warning('请输入完整信息')
+    message.warning('请输入完整信息')
     return
   }
   if (form.password !== form.confirmPassword) {
-    ElMessage.warning('两次密码不一致')
+    message.warning('两次密码不一致')
     return
   }
   loading.value = true
@@ -41,9 +42,8 @@ async function handleSubmit() {
       role: res.data.role,
       avatar: res.data.avatar,
     })
-    ElMessage.success('注册并登录成功')
-    const redirect = res.data.role === 'ADMIN' ? '/admin' : '/student'
-    router.replace(redirect)
+    message.success('注册并登录成功')
+    router.replace(res.data.role === 'ADMIN' ? '/admin' : '/student')
   } finally {
     loading.value = false
   }
@@ -51,43 +51,64 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="auth-wrapper">
-    <div class="auth-card">
-      <div class="auth-right">
-        <h2 class="title">立即注册</h2>
-        <p class="subtitle muted">注册后即可上传资料、收藏笔记、参与互动</p>
-        <el-form label-width="0" class="auth-form" @keyup.enter="handleSubmit">
-          <el-form-item>
-            <el-input v-model="form.username" placeholder="用户名" size="large" :prefix-icon="User" />
-          </el-form-item>
-          <el-form-item>
-            <el-input v-model="form.nickname" placeholder="昵称/显示名称" size="large" :prefix-icon="User" />
-          </el-form-item>
-          <el-form-item>
-            <el-input v-model="form.email" placeholder="邮箱（可选）" size="large" :prefix-icon="Message" />
-          </el-form-item>
-          <el-form-item>
-            <el-input v-model="form.password" type="password" placeholder="登录密码" size="large" :prefix-icon="Lock" show-password />
-          </el-form-item>
-          <el-form-item>
-            <el-input
-              v-model="form.confirmPassword"
+  <div class="auth-page">
+    <div class="app-wash" aria-hidden="true" />
+    <div class="auth-stage">
+      <div class="hero-copy">
+        <div class="brand-mark">CS</div>
+        <h1>加入 Campus Share</h1>
+        <p>注册后即可浏览资料、上传分享、结识同学</p>
+      </div>
+      <div class="auth-card glass-panel-strong">
+        <h2>注册</h2>
+        <p class="hint">新用户默认为学生角色</p>
+        <NForm class="form" @keyup.enter="handleSubmit">
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput v-model:value="form.username" size="large" placeholder="用户名" round>
+              <template #prefix><NIcon :component="PersonOutline" /></template>
+            </NInput>
+          </NFormItem>
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput v-model:value="form.nickname" size="large" placeholder="昵称" round>
+              <template #prefix><NIcon :component="PersonOutline" /></template>
+            </NInput>
+          </NFormItem>
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput v-model:value="form.email" size="large" placeholder="邮箱（可选）" round>
+              <template #prefix><NIcon :component="MailOutline" /></template>
+            </NInput>
+          </NFormItem>
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput
+              v-model:value="form.password"
               type="password"
-              placeholder="确认密码"
+              show-password-on="click"
               size="large"
-              :prefix-icon="Lock"
-              show-password
-            />
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" round size="large" :loading="loading" @click="handleSubmit" style="width: 100%">
-              注册并登录
-            </el-button>
-          </el-form-item>
-        </el-form>
+              placeholder="登录密码"
+              round
+            >
+              <template #prefix><NIcon :component="LockClosedOutline" /></template>
+            </NInput>
+          </NFormItem>
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput
+              v-model:value="form.confirmPassword"
+              type="password"
+              show-password-on="click"
+              size="large"
+              placeholder="确认密码"
+              round
+            >
+              <template #prefix><NIcon :component="LockClosedOutline" /></template>
+            </NInput>
+          </NFormItem>
+          <NButton type="primary" size="large" block :loading="loading" @click="handleSubmit">
+            创建账号
+          </NButton>
+        </NForm>
         <div class="extra">
           已有账号？
-          <el-link type="primary" @click="router.push('/login')">去登录</el-link>
+          <button type="button" class="link" @click="router.push('/login')">去登录</button>
         </div>
       </div>
     </div>
@@ -95,53 +116,96 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-.auth-wrapper {
-  min-height: 100vh;
-  background: radial-gradient(circle at top, #eef2ff, #f5f7fb);
-  display: flex;
+.auth-page {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-stage {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 28px;
   align-items: center;
-  justify-content: center;
-  padding: 32px clamp(16px, 4vw, 48px);
+}
+
+.hero-copy h1 {
+  margin: 16px 0 8px;
+  font-size: clamp(32px, 4.5vw, 46px);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+
+.hero-copy p {
+  margin: 0;
+  color: var(--m-ink-soft);
+}
+
+.brand-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(145deg, var(--m-sage), var(--m-sage-deep));
+  box-shadow: 0 16px 32px rgba(92, 128, 112, 0.28);
 }
 
 .auth-card {
-  width: min(480px, 100%);
-  background: #fff;
-  border-radius: 32px;
-  box-shadow: 0 25px 60px rgba(15, 23, 42, 0.18);
+  padding: 32px 28px;
 }
 
-.auth-right {
-  padding: clamp(24px, 4vw, 48px);
+.auth-card h2 {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+}
+
+.hint {
+  margin: 6px 0 20px;
+  color: var(--m-ink-soft);
+}
+
+.form {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.title {
-  margin-bottom: 4px;
-  font-size: 24px;
-  font-weight: 600;
-}
-
-.subtitle {
-  margin: 0;
-}
-
-.auth-form {
-  margin-top: 24px;
+  gap: 12px;
 }
 
 .extra {
-  text-align: right;
-  margin-top: 12px;
-  color: #6b7280;
+  margin-top: 20px;
+  text-align: center;
+  color: var(--m-ink-soft);
+  font-size: 14px;
+}
+
+.link {
+  border: none;
+  background: none;
+  color: var(--m-sage-deep);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
 }
 
 @media (max-width: 768px) {
-  .auth-card {
-    border-radius: 20px;
+  .auth-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-copy {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 }
 </style>

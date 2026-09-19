@@ -1,12 +1,45 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { View, Download, Star, StarFilled, ChatDotRound, User, Clock, Folder, Document } from '@element-plus/icons-vue'
-import { fetchResourceDetail, likeResource, getLikeStatus, fetchComments, createComment, deleteComment, type Resource, type Comment } from '../api/resource'
+import {
+  NButton,
+  NTag,
+  NIcon,
+  NInput,
+  NCheckbox,
+  NEmpty,
+  NSpin,
+  NPagination,
+  NModal,
+  NForm,
+  NFormItem,
+  NSpace,
+} from 'naive-ui'
+import {
+  DownloadOutline,
+  StarOutline,
+  Star,
+  DocumentOutline,
+  FolderOutline,
+  HeartOutline,
+  Heart,
+  FlagOutline,
+} from '@vicons/ionicons5'
+import {
+  fetchResourceDetail,
+  likeResource,
+  getLikeStatus,
+  fetchComments,
+  createComment,
+  deleteComment,
+  type Resource,
+  type Comment,
+} from '../api/resource'
 import request from '../api/request'
 import { useUserStore } from '../stores/user'
 import { downloadResource, getAvatarUrl } from '../utils/resource'
+import { message } from '../utils/feedback'
+import PageHeader from '../components/PageHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,8 +72,8 @@ async function loadDetail() {
       await checkLike()
     }
     await loadComments(1)
-  } catch (e) {
-    ElMessage.error('加载详情失败')
+  } catch {
+    message.error('加载详情失败')
     router.back()
   } finally {
     loading.value = false
@@ -52,8 +85,9 @@ async function checkFavorite() {
   try {
     const res = await request.get<{ success: boolean; data: Array<{ resourceId: number }> }>('/favorites')
     const favorites = res.data || []
-    isFavorited.value = favorites.some(fav => fav.resourceId === resource.value!.id)
-  } catch (e) {
+    isFavorited.value = favorites.some((fav) => fav.resourceId === resource.value!.id)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -62,14 +96,15 @@ async function checkLike() {
   try {
     const res = await getLikeStatus(resource.value.id)
     isLiked.value = res.data || false
-  } catch (e) {
+  } catch {
+    /* ignore */
   }
 }
 
 async function handleLike() {
   if (!resource.value) return
   if (!userStore.token) {
-    ElMessage.warning('请先登录')
+    message.warning('请先登录')
     return
   }
   try {
@@ -85,37 +120,39 @@ async function handleLike() {
         isLikedNow = false
       }
       isLiked.value = isLikedNow
-      ElMessage.success(isLikedNow ? '点赞成功' : '取消点赞')
+      message.success(isLikedNow ? '点赞成功' : '取消点赞')
     } else {
-      ElMessage.error('操作失败：未返回资源数据')
+      message.error('操作失败：未返回资源数据')
     }
   } catch (e: any) {
     console.error('点赞操作错误:', e)
-    ElMessage.error(e.response?.data?.message || e.message || '操作失败')
+    message.error(e.response?.data?.message || e.message || '操作失败')
   }
 }
 
 async function handleFavorite() {
   if (!resource.value) return
   if (!userStore.token) {
-    ElMessage.warning('请先登录')
+    message.warning('请先登录')
     return
   }
   try {
-    const res = await request.post<{ success: boolean; data: Resource; message?: string }>(`/favorites/${resource.value.id}`)
+    const res = await request.post<{ success: boolean; data: Resource; message?: string }>(
+      `/favorites/${resource.value.id}`,
+    )
     const updatedResource = res.data as Resource
     if (updatedResource && resource.value) {
       resource.value.favoriteCount = updatedResource.favoriteCount || 0
       resource.value.likeCount = updatedResource.likeCount || 0
       const wasFavorited = isFavorited.value
       isFavorited.value = !wasFavorited
-      ElMessage.success(wasFavorited ? '已取消收藏' : '收藏成功')
+      message.success(wasFavorited ? '已取消收藏' : '收藏成功')
     } else {
-      ElMessage.error('操作失败：未返回资源数据')
+      message.error('操作失败：未返回资源数据')
     }
   } catch (e: any) {
     console.error('收藏操作错误:', e)
-    ElMessage.error(e.response?.data?.message || e.message || '操作失败')
+    message.error(e.response?.data?.message || e.message || '操作失败')
   }
 }
 
@@ -133,7 +170,7 @@ function handleDownload() {
 function handleReport() {
   if (!resource.value) return
   if (!userStore.token) {
-    ElMessage.warning('请先登录')
+    message.warning('请先登录')
     return
   }
   reportReason.value = ''
@@ -143,7 +180,7 @@ function handleReport() {
 async function submitReport() {
   if (!resource.value) return
   if (!reportReason.value.trim()) {
-    ElMessage.warning('请输入举报原因')
+    message.warning('请输入举报原因')
     return
   }
   reporting.value = true
@@ -152,11 +189,11 @@ async function submitReport() {
       resourceId: resource.value.id,
       reason: reportReason.value,
     })
-    ElMessage.success('举报提交成功，我们会尽快处理')
+    message.success('举报提交成功，我们会尽快处理')
     reportDialogVisible.value = false
     reportReason.value = ''
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '举报失败')
+    message.error(e.response?.data?.message || '举报失败')
   } finally {
     reporting.value = false
   }
@@ -180,7 +217,7 @@ const flattenedComments = computed(() => {
   for (const comment of allComments) {
     const rootId = comment.rootId || comment.id
     if (!rootMap.has(rootId)) {
-      const root = allComments.find(c => c.id === rootId && (c.rootId === null || c.rootId === c.id))
+      const root = allComments.find((c) => c.id === rootId && (c.rootId === null || c.rootId === c.id))
       if (root) {
         rootMap.set(rootId, root)
       }
@@ -229,7 +266,7 @@ async function loadComments(page: number) {
       total: res.data.total || 0,
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '加载评论失败')
+    message.error(e.response?.data?.message || '加载评论失败')
   } finally {
     commentLoading.value = false
   }
@@ -237,7 +274,7 @@ async function loadComments(page: number) {
 
 function startReply(comment: Comment) {
   if (!userStore.token) {
-    ElMessage.warning('请先登录')
+    message.warning('请先登录')
     return
   }
   replyingTo.value = comment
@@ -252,12 +289,12 @@ function cancelReply() {
 async function handleSubmitComment() {
   if (!resource.value) return
   if (!userStore.token) {
-    ElMessage.warning('请先登录')
+    message.warning('请先登录')
     return
   }
   const content = commentContent.value.trim()
   if (!content) {
-    ElMessage.warning('请输入评论内容')
+    message.warning('请输入评论内容')
     return
   }
   commentSubmitting.value = true
@@ -267,12 +304,12 @@ async function handleSubmitComment() {
       parentId: replyingTo.value?.id,
       anonymous: commentAnonymous.value,
     })
-    ElMessage.success('发布成功')
+    message.success('发布成功')
     commentContent.value = ''
     replyingTo.value = null
     await loadComments(1)
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '发布失败')
+    message.error(e.response?.data?.message || '发布失败')
   } finally {
     commentSubmitting.value = false
   }
@@ -288,15 +325,15 @@ function canDeleteComment(comment: Comment) {
 async function handleDeleteComment(comment: Comment) {
   if (!resource.value) return
   if (!canDeleteComment(comment)) {
-    ElMessage.warning('无权删除')
+    message.warning('无权删除')
     return
   }
   try {
     await deleteComment(resource.value.id, comment.id)
-    ElMessage.success('已删除')
+    message.success('已删除')
     await loadComments(commentPage.value.page)
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '删除失败')
+    message.error(e.response?.data?.message || '删除失败')
   }
 }
 
@@ -327,816 +364,465 @@ function getFileType(fileUrl: string) {
   return typeMap[ext] || '文件'
 }
 
-function getFileSize(_fileUrl: string) {
-  return '未知大小'
+function goOwner() {
+  if (!resource.value) return
+  const path = route.path.startsWith('/admin')
+    ? `/admin/user/${resource.value.ownerId}`
+    : `/student/user/${resource.value.ownerId}`
+  router.push(path)
 }
 
 onMounted(loadDetail)
 </script>
 
 <template>
-  <div class="resource-detail-page" v-loading="loading">
-    <div v-if="resource" class="detail-container">
-      <div class="header-section">
-        <div class="title-wrapper">
-          <h1 class="main-title">{{ resource.title }}</h1>
-          <div class="meta-tags">
-            <el-tag v-if="resource.categoryName" type="primary" size="large" effect="plain">
-              <el-icon><Folder /></el-icon>
-              {{ resource.categoryName }}
-            </el-tag>
-            <el-tag type="info" size="large" effect="plain">
-              <el-icon><Document /></el-icon>
-              {{ getFileType(resource.fileUrl) }}
-            </el-tag>
+  <div class="page">
+    <PageHeader title="资料详情" />
+
+    <NSpin :show="loading">
+      <template v-if="resource">
+        <div class="sheet glass-panel-strong">
+          <div class="sheet-top">
+            <div class="hero-tags">
+              <NTag v-if="resource.categoryName" :bordered="false" type="success" size="small">
+                <template #icon><NIcon :component="FolderOutline" /></template>
+                {{ resource.categoryName }}
+              </NTag>
+              <NTag :bordered="false" size="small">
+                <template #icon><NIcon :component="DocumentOutline" /></template>
+                {{ getFileType(resource.fileUrl) }}
+              </NTag>
+            </div>
+            <button
+              v-if="userStore.token"
+              type="button"
+              class="report-link"
+              @click="handleReport"
+            >
+              <NIcon :component="FlagOutline" :size="14" />
+              举报
+            </button>
           </div>
-        </div>
-        <div class="action-buttons">
-          <div class="primary-actions">
-            <el-button
+
+          <h2 class="hero-title">{{ resource.title }}</h2>
+
+          <div class="meta-line muted">
+            <button type="button" class="owner-link" @click="goOwner">{{ resource.ownerName }}</button>
+            <span>·</span>
+            <span>{{ formatDate(resource.createdAt) }}</span>
+            <span>·</span>
+            <span>{{ resource.viewCount || 0 }} 浏览</span>
+            <span v-if="resource.allowDownload">· {{ resource.downloadCount || 0 }} 下载</span>
+          </div>
+
+          <p v-if="resource.description" class="desc">{{ resource.description }}</p>
+          <p v-else class="muted desc-empty">暂无资料说明</p>
+
+          <div class="action-bar">
+            <NButton
               v-if="resource.allowDownload"
-              class="primary-btn download-btn"
+              type="primary"
               size="large"
               @click="handleDownload"
             >
-              <el-icon class="btn-icon"><Download /></el-icon>
+              <template #icon><NIcon :component="DownloadOutline" /></template>
               下载
-            </el-button>
-            <el-button
+            </NButton>
+            <NButton
               v-if="userStore.token"
-              class="primary-btn report-btn"
+              :type="isFavorited ? 'warning' : 'default'"
+              :secondary="!isFavorited"
               size="large"
-              @click="handleReport"
-            >
-              <el-icon class="btn-icon"><ChatDotRound /></el-icon>
-              举报
-            </el-button>
-          </div>
-          <div class="secondary-actions" v-if="userStore.token">
-            <el-button
-              class="icon-btn favorite-btn"
-              :class="{ active: isFavorited }"
-              circle
               @click="handleFavorite"
             >
-              <el-icon class="btn-icon">
-                <component :is="isFavorited ? StarFilled : Star" />
-              </el-icon>
-            </el-button>
-            <el-button
-              class="icon-btn like-btn"
-              :class="{ active: isLiked }"
-              circle
+              <template #icon>
+                <NIcon :component="isFavorited ? Star : StarOutline" />
+              </template>
+              {{ isFavorited ? '已收藏' : '收藏' }}
+              <span class="btn-count">{{ resource.favoriteCount || 0 }}</span>
+            </NButton>
+            <NButton
+              v-if="userStore.token"
+              :type="isLiked ? 'error' : 'default'"
+              :secondary="!isLiked"
+              size="large"
               @click="handleLike"
             >
-              <span class="btn-icon like-icon">{{ isLiked ? '❤' : '♡' }}</span>
-            </el-button>
+              <template #icon>
+                <NIcon :component="isLiked ? Heart : HeartOutline" />
+              </template>
+              {{ isLiked ? '已赞' : '点赞' }}
+              <span class="btn-count">{{ resource.likeCount || 0 }}</span>
+            </NButton>
           </div>
-        </div>
-      </div>
 
-      <div class="stats-cards">
-        <div class="stat-card">
-          <div class="stat-icon-wrapper view">
-            <el-icon><View /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ resource.viewCount || 0 }}</div>
-            <div class="stat-label">浏览</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon-wrapper download">
-            <el-icon><Download /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ resource.downloadCount || 0 }}</div>
-            <div class="stat-label">下载</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon-wrapper favorite">
-            <el-icon><Star /></el-icon>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ resource.favoriteCount || 0 }}</div>
-            <div class="stat-label">收藏</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon-wrapper like">
-            <span class="like-heart-icon">❤</span>
-          </div>
-          <div class="stat-info">
-            <div class="stat-value">{{ resource.likeCount || 0 }}</div>
-            <div class="stat-label">点赞</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="info-cards">
-        <div class="info-card">
-          <el-icon class="info-icon"><User /></el-icon>
-          <div class="info-content">
-            <div class="info-label">上传者</div>
-            <div class="info-value">
-              <el-link type="primary" :underline="false" @click="router.push(route.path.startsWith('/admin') ? `/admin/user/${resource.ownerId}` : `/student/user/${resource.ownerId}`)" style="cursor: pointer">
-                {{ resource.ownerName }}
-              </el-link>
-            </div>
-          </div>
-        </div>
-        <div class="info-card">
-          <el-icon class="info-icon"><Clock /></el-icon>
-          <div class="info-content">
-            <div class="info-label">上传时间</div>
-            <div class="info-value">{{ formatDate(resource.createdAt) }}</div>
-          </div>
-        </div>
-        <div class="info-card">
-          <el-icon class="info-icon"><Document /></el-icon>
-          <div class="info-content">
-            <div class="info-label">文件类型</div>
-            <div class="info-value">{{ getFileType(resource.fileUrl) }}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="content-card">
-        <h2 class="card-title">资料说明</h2>
-        <div class="card-content">
-          <p v-if="resource.description" class="description-text">{{ resource.description }}</p>
-          <p v-else class="empty-text">暂无说明</p>
-        </div>
-      </div>
-
-      <div class="content-card" v-if="resource.fileUrl">
-        <h2 class="card-title">文件</h2>
-        <div class="file-card">
-          <div class="file-header">
-            <div class="file-icon-wrapper">
-              <el-icon class="file-icon"><Document /></el-icon>
-            </div>
-            <div class="file-info">
-              <div class="file-name">{{ resource.fileUrl.split('/').pop() }}</div>
-              <div class="file-meta">{{ getFileType(resource.fileUrl) }} · {{ getFileSize(resource.fileUrl) }}</div>
-            </div>
-          </div>
-          <el-button
-            type="primary"
-            :icon="Download"
-            @click="handleDownload"
-            :disabled="!resource.allowDownload"
-            class="download-btn"
-          >
-            下载文件
-          </el-button>
-        </div>
-      </div>
-
-      <div class="content-card comment-card">
-        <h2 class="card-title">评论 <span class="comment-count">({{ commentPage.total }})</span></h2>
-
-        <div class="comment-input-wrapper">
-          <el-input
-            v-model="commentContent"
-            type="textarea"
-            :rows="4"
-            maxlength="500"
-            show-word-limit
-            placeholder="留下你的想法..."
-            class="comment-input"
-          />
-          <div class="comment-toolbar">
-            <div class="toolbar-left">
-              <el-checkbox v-model="commentAnonymous">匿名评论</el-checkbox>
-              <div class="reply-hint" v-if="replyingTo">
-                回复 <span class="reply-name">{{ replyingTo.displayName }}</span>
-                <el-button link type="primary" size="small" @click="cancelReply">取消</el-button>
-              </div>
-            </div>
-            <el-button 
-              type="primary" 
-              :loading="commentSubmitting" 
-              @click="handleSubmitComment"
-              :disabled="!commentContent.trim()"
-            >
-              发布评论
-            </el-button>
+          <div v-if="resource.fileUrl" class="file-chip">
+            <NIcon :size="18" :component="DocumentOutline" />
+            <span class="file-name">{{ resource.fileUrl.split('/').pop() }}</span>
+            <span class="muted">{{ getFileType(resource.fileUrl) }}</span>
           </div>
         </div>
 
-        <div class="comment-list" v-loading="commentLoading">
-          <div v-if="flattenedComments.length === 0" class="empty-state">
-            <el-empty description="暂无评论，快来发表第一条评论吧" :image-size="120" />
-          </div>
-          <div v-else>
-            <div v-for="item in flattenedComments" :key="item.id" class="comment-item" :class="{ 'is-reply': item.parentId !== null }">
-              <img class="comment-avatar" :src="getAvatarUrl(item.avatar) || defaultAnonAvatar" alt="avatar" />
-              <div class="comment-content">
-                <div class="comment-header">
-                  <span class="comment-author" v-if="!item.replyToName">{{ item.displayName }}</span>
-                  <span class="comment-reply-hint" v-else>{{ item.displayName }}回复{{ item.replyToName }}</span>
-                  <span class="comment-time">{{ formatDate(item.createdAt) }}</span>
-                </div>
-                <div class="comment-text">{{ item.content }}</div>
-                <div class="comment-actions">
-                  <el-button text size="small" @click="startReply(item)">回复</el-button>
-                  <el-button v-if="canDeleteComment(item)" text size="small" type="danger" @click="handleDeleteComment(item)">删除</el-button>
+        <div class="glass-panel section">
+          <h3 class="section-title">
+            评论
+            <span class="muted count">({{ commentPage.total }})</span>
+          </h3>
+
+          <div class="comment-composer">
+            <NInput
+              v-model:value="commentContent"
+              type="textarea"
+              :rows="3"
+              maxlength="500"
+              show-count
+              placeholder="留下你的想法..."
+            />
+            <div class="composer-bar">
+              <div class="composer-left">
+                <NCheckbox v-model:checked="commentAnonymous">匿名评论</NCheckbox>
+                <div v-if="replyingTo" class="reply-hint muted">
+                  回复 <span class="reply-name">{{ replyingTo.displayName }}</span>
+                  <NButton text type="primary" size="tiny" @click="cancelReply">取消</NButton>
                 </div>
               </div>
-            </div>
-
-            <div class="comment-pagination" v-if="commentPage.total > commentPage.size">
-              <el-pagination
-                background
-                layout="prev, pager, next"
-                :total="commentPage.total"
-                :page-size="commentPage.size"
-                :current-page="commentPage.page"
-                @current-change="loadComments"
-              />
+              <NButton
+                type="primary"
+                :loading="commentSubmitting"
+                :disabled="!commentContent.trim()"
+                @click="handleSubmitComment"
+              >
+                发布评论
+              </NButton>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <el-dialog v-model="reportDialogVisible" title="举报资料" width="500px">
-      <el-form>
-        <el-form-item label="资料标题">
-          <el-input :value="resource?.title" disabled />
-        </el-form-item>
-        <el-form-item label="举报原因" required>
-          <el-input
-            v-model="reportReason"
-            type="textarea"
-            :rows="4"
-            placeholder="请详细说明举报原因，例如：内容违规、侵权、虚假信息等"
-            maxlength="500"
-            show-word-limit
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="reportDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="reporting" @click="submitReport">提交举报</el-button>
+          <NSpin :show="commentLoading">
+            <NEmpty
+              v-if="flattenedComments.length === 0"
+              description="暂无评论"
+            />
+            <div v-else class="comment-list">
+              <div
+                v-for="item in flattenedComments"
+                :key="item.id"
+                class="comment-item"
+                :class="{ 'is-reply': item.parentId !== null }"
+              >
+                <img
+                  class="comment-avatar"
+                  :src="getAvatarUrl(item.avatar) || defaultAnonAvatar"
+                  alt="avatar"
+                />
+                <div class="comment-body">
+                  <div class="comment-head">
+                    <span v-if="!item.replyToName" class="author">{{ item.displayName }}</span>
+                    <span v-else class="author">{{ item.displayName }}回复{{ item.replyToName }}</span>
+                    <span class="muted time">{{ formatDate(item.createdAt) }}</span>
+                  </div>
+                  <div class="comment-text">{{ item.content }}</div>
+                  <div class="comment-actions">
+                    <NButton text size="tiny" @click="startReply(item)">回复</NButton>
+                    <NButton
+                      v-if="canDeleteComment(item)"
+                      text
+                      size="tiny"
+                      type="error"
+                      @click="handleDeleteComment(item)"
+                    >
+                      删除
+                    </NButton>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="commentPage.total > commentPage.size" class="comment-pagination">
+                <NPagination
+                  :page="commentPage.page"
+                  :page-size="commentPage.size"
+                  :item-count="commentPage.total"
+                  @update:page="loadComments"
+                />
+              </div>
+            </div>
+          </NSpin>
+        </div>
       </template>
-    </el-dialog>
+    </NSpin>
+
+    <NModal
+      v-model:show="reportDialogVisible"
+      preset="card"
+      title="举报资料"
+      style="width: min(500px, 92vw)"
+      :bordered="false"
+    >
+      <NForm label-placement="top">
+        <NFormItem label="资料标题">
+          <NInput :value="resource?.title" disabled />
+        </NFormItem>
+        <NFormItem label="举报原因" required>
+          <NInput
+            v-model:value="reportReason"
+            type="textarea"
+            :rows="4"
+            placeholder="请详细说明举报原因"
+            maxlength="500"
+            show-count
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="reportDialogVisible = false">取消</NButton>
+          <NButton type="primary" :loading="reporting" @click="submitReport">提交举报</NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.resource-detail-page {
-  max-width: 1400px;
+.page {
+  max-width: 860px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
-}
-
-.detail-container {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.header-section {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 32px;
-  color: white;
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
-}
-
-.title-wrapper {
-  margin-bottom: 24px;
-}
-
-.main-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin: 0 0 16px 0;
-  line-height: 1.3;
-  color: white;
-}
-
-.meta-tags {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.meta-tags :deep(.el-tag) {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: white;
-  backdrop-filter: blur(10px);
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.primary-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.secondary-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding-left: 16px;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.primary-btn {
-  min-width: 120px;
-  height: 44px;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 20px;
-  line-height: 1;
-  border: none;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.primary-btn.download-btn {
-  background: white;
-  color: #667eea;
-}
-
-.primary-btn.download-btn:hover {
-  background: #f8f9ff;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.primary-btn.report-btn {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.primary-btn.report-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
-}
-
-.icon-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
-}
-
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2);
-}
-
-.icon-btn.active {
-  background: rgba(255, 255, 255, 0.25);
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
-}
-
-.icon-btn.favorite-btn {
-  color: #ffd700;
-}
-
-.icon-btn.favorite-btn.active {
-  background: rgba(255, 215, 0, 0.2);
-  border-color: #ffd700;
-  box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.15);
-}
-
-.icon-btn.like-btn {
-  color: #ff6b9d;
-}
-
-.icon-btn.like-btn.active {
-  background: rgba(255, 107, 157, 0.2);
-  border-color: #ff6b9d;
-  box-shadow: 0 0 0 3px rgba(255, 107, 157, 0.15);
-}
-
-.btn-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  margin: 0;
-}
-
-.icon-btn .btn-icon {
-  font-size: 20px;
-}
-
-.like-icon {
-  font-size: 20px;
-  line-height: 1;
-  display: inline-block;
-}
-
-.stats-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-}
-
-.stat-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-}
-
-.stat-icon-wrapper {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-}
-
-.stat-icon-wrapper.view {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.stat-icon-wrapper.download {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
-}
-
-.stat-icon-wrapper.favorite {
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: white;
-}
-
-.stat-icon-wrapper.like {
-  background: linear-gradient(135deg, #fb7185 0%, #f43f5e 100%);
-  color: white;
-}
-
-.like-heart-icon {
-  font-size: 28px;
-  line-height: 1;
-  display: inline-block;
-}
-
-.stat-info {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1f2937;
-  line-height: 1;
-  margin-bottom: 4px;
-}
-
-.stat-label {
-  font-size: 14px;
-  color: #6b7280;
-}
-
-.info-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 16px;
 }
 
-.info-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+.sheet {
+  padding: 26px 28px;
 }
 
-.info-icon {
-  font-size: 32px;
-  color: #667eea;
-  flex-shrink: 0;
-}
-
-.info-content {
-  flex: 1;
-}
-
-.info-label {
-  font-size: 13px;
-  color: #6b7280;
-  margin-bottom: 4px;
-}
-
-.info-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.content-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-}
-
-.card-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 20px 0;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #f3f4f6;
-}
-
-.comment-count {
-  font-size: 16px;
-  font-weight: 400;
-  color: #6b7280;
-}
-
-.card-content {
-  line-height: 1.8;
-}
-
-.description-text {
-  color: #374151;
-  white-space: pre-wrap;
-  margin: 0;
-}
-
-.empty-text {
-  color: #9ca3af;
-  font-style: italic;
-  margin: 0;
-}
-
-.file-card {
+.sheet-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 20px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.file-header {
+.hero-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.report-link {
+  border: none;
+  background: transparent;
+  color: var(--m-ink-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.report-link:hover {
+  color: var(--m-terracotta);
+  background: rgba(196, 137, 126, 0.12);
+}
+
+.hero-title {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--m-ink);
+  line-height: 1.25;
+}
+
+.meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.owner-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--m-sage-deep);
+  font-weight: 600;
+  cursor: pointer;
+  font: inherit;
+}
+
+.owner-link:hover {
+  text-decoration: underline;
+}
+
+.desc {
+  margin: 0 0 20px;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--m-ink);
+}
+
+.desc-empty {
+  margin: 0 0 20px;
+}
+
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.btn-count {
+  margin-left: 4px;
+  opacity: 0.75;
+  font-weight: 500;
+}
+
+.file-chip {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex: 1;
-}
-
-.file-icon-wrapper {
-  width: 64px;
-  height: 64px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.file-icon {
-  font-size: 32px;
-  color: white;
-}
-
-.file-info {
-  flex: 1;
-  min-width: 0;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--m-stroke);
+  color: var(--m-sage-deep);
+  font-size: 13px;
 }
 
 .file-name {
-  font-size: 16px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--m-ink);
+  font-weight: 500;
+}
+
+.section {
+  padding: 22px 24px;
+}
+
+.section-title {
+  margin: 0 0 14px;
+  font-size: 17px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
-  word-break: break-all;
 }
 
-.file-meta {
+.count {
+  font-weight: 400;
   font-size: 14px;
-  color: #6b7280;
 }
 
-.download-btn {
-  flex-shrink: 0;
+.comment-composer {
+  margin-bottom: 18px;
 }
 
-.comment-card {
-  margin-top: 0;
-}
-
-.comment-input-wrapper {
-  margin-bottom: 32px;
-}
-
-.comment-input :deep(.el-textarea__inner) {
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.comment-toolbar {
+.composer-bar {
+  margin-top: 10px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.toolbar-left {
+.composer-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .reply-hint {
-  color: #6b7280;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .reply-name {
-  color: #667eea;
+  color: var(--m-sage-deep);
   font-weight: 600;
 }
 
 .comment-list {
-  border-top: 1px solid #f3f4f6;
-  padding-top: 24px;
-}
-
-.empty-state {
-  padding: 40px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .comment-item {
   display: flex;
-  gap: 16px;
-  padding: 20px 0;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.comment-item:last-child {
-  border-bottom: none;
+  gap: 12px;
 }
 
 .comment-item.is-reply {
-  padding-left: 20px;
-  background-color: #fafafa;
-  border-left: 3px solid #e5e7eb;
-  margin-top: 8px;
+  margin-left: 36px;
 }
 
 .comment-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   object-fit: cover;
-  background: #f3f4f6;
   flex-shrink: 0;
+  background: rgba(122, 158, 142, 0.15);
 }
 
-.comment-content {
+.comment-body {
   flex: 1;
   min-width: 0;
 }
 
-.comment-header {
+.comment-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
-.comment-author {
+.author {
   font-weight: 600;
-  color: #1f2937;
-  font-size: 15px;
+  font-size: 14px;
 }
 
-.comment-reply-hint {
-  color: #1f2937;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.comment-time {
-  color: #9ca3af;
-  font-size: 13px;
-  margin-left: auto;
+.time {
+  font-size: 12px;
 }
 
 .comment-text {
-  color: #374151;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.6;
   white-space: pre-wrap;
-  margin-bottom: 12px;
 }
 
 .comment-actions {
-  display: flex;
-  gap: 16px;
+  margin-top: 4px;
 }
 
 .comment-pagination {
   display: flex;
   justify-content: center;
-  padding: 24px 0 0 0;
+  margin-top: 8px;
 }
 
-@media (max-width: 768px) {
-  .resource-detail-page {
-    padding: 16px;
+@media (max-width: 640px) {
+  .sheet {
+    padding: 20px 18px;
   }
 
-  .header-section {
-    padding: 24px 20px;
-  }
-
-  .main-title {
-    font-size: 24px;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  .primary-actions {
-    width: 100%;
-    flex-direction: column;
-  }
-
-  .primary-actions .primary-btn {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .secondary-actions {
-    width: 100%;
-    justify-content: center;
-    padding-left: 0;
-    border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-    padding-top: 12px;
-  }
-
-  .stats-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .info-cards {
-    grid-template-columns: 1fr;
-  }
-
-  .file-card {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .download-btn {
-    width: 100%;
+  .comment-item.is-reply {
+    margin-left: 16px;
   }
 }
 </style>

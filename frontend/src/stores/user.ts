@@ -27,6 +27,12 @@ export const useUserStore = defineStore('user', {
       localStorage.setItem('user', JSON.stringify(user))
     },
 
+    patchUser(partial: Partial<UserInfo>) {
+      if (!this.user) return
+      this.user = { ...this.user, ...partial }
+      localStorage.setItem('user', JSON.stringify(this.user))
+    },
+
     clear() {
       this.token = null
       this.user = null

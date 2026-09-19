@@ -1,23 +1,35 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { message } from './feedback'
 import { useUserStore } from '../stores/user'
 import request from '../api/request'
 import type { Resource } from '../api/resource'
 
+/** Normalize avatar path from backend to a browser-loadable URL */
 export function getAvatarUrl(avatar?: string | null): string | undefined {
-  if (!avatar) {
-    return undefined
+  if (!avatar) return undefined
+  const value = avatar.trim()
+  if (!value) return undefined
+
+  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('data:')) {
+    return value
   }
-  if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
-    return avatar
+
+  // Already proxied
+  if (value.startsWith('/api/')) {
+    return value
   }
-  if (avatar.startsWith('data:')) {
-    return avatar
+
+  // Backend stores "/files/public/xxx" or "files/public/xxx"
+  if (value.startsWith('/files/') || value.startsWith('files/')) {
+    return value.startsWith('/') ? `/api${value}` : `/api/${value}`
   }
-  if (avatar.startsWith('/files/')) {
-    return `/api${avatar}`
+
+  // Bare filename → public files
+  if (!value.includes('/')) {
+    return `/api/files/public/${value}`
   }
-  return avatar
+
+  return value.startsWith('/') ? `/api${value}` : `/api/${value}`
 }
 
 export async function downloadResource(
@@ -26,15 +38,15 @@ export async function downloadResource(
     onSuccess?: () => void
     onError?: (error: any) => void
     updateCount?: (count: number) => void
-  }
+  },
 ) {
   if (!resource.fileUrl) {
-    ElMessage.warning('文件不存在')
+    message.warning('文件不存在')
     return
   }
 
   if (resource.allowDownload === false) {
-    ElMessage.warning('该资料不允许下载')
+    message.warning('该资料不允许下载')
     return
   }
 
@@ -92,7 +104,7 @@ export async function downloadResource(
       options.updateCount((resource.downloadCount || 0) + 1)
     }
 
-    ElMessage.success('下载成功')
+    message.success('下载成功')
     options?.onSuccess?.()
   } catch (error: any) {
     console.error('下载错误详情:', {
@@ -114,7 +126,7 @@ export async function downloadResource(
       errorMessage = error.message
     }
 
-    ElMessage.error(errorMessage)
+    message.error(errorMessage)
     options?.onError?.(error)
   }
 }
@@ -124,10 +136,10 @@ export function viewResource(
   options?: {
     onView?: () => void
     router?: any
-  }
+  },
 ) {
   if (!resource.fileUrl) {
-    ElMessage.warning('文件不存在')
+    message.warning('文件不存在')
     return
   }
 

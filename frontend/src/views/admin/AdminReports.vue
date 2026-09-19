@@ -1,10 +1,35 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, ChatDotRound, View, Edit, Delete } from '@element-plus/icons-vue'
+import {
+  NButton,
+  NTabs,
+  NTabPane,
+  NTag,
+  NEmpty,
+  NSpin,
+  NModal,
+  NForm,
+  NFormItem,
+  NSelect,
+  NInput,
+  NInputNumber,
+  NSpace,
+  NIcon,
+  NRadioGroup,
+  NRadioButton,
+} from 'naive-ui'
+import {
+  DocumentOutline,
+  ChatbubbleOutline,
+  EyeOutline,
+  CreateOutline,
+  TrashOutline,
+} from '@vicons/ionicons5'
 import request from '../../api/request'
 import type { UserReport } from '../../api/userReport'
+import PageHeader from '../../components/PageHeader.vue'
+import { message, dialog } from '../../utils/feedback'
 
 const router = useRouter()
 
@@ -39,18 +64,22 @@ const currentReport = ref<Report | null>(null)
 const currentUserReport = ref<UserReport | null>(null)
 const submitting = ref(false)
 
-const statusMap: Record<
-  string,
-  {
-    label: string
-    type: 'primary' | 'success' | 'warning' | 'info' | 'danger'
-  }
-> = {
+const statusMap: Record<string, { label: string; type: 'success' | 'warning' | 'info' | 'error' | 'default' }> = {
   PENDING: { label: '待处理', type: 'warning' },
   RESOLVED: { label: '已处理', type: 'success' },
   REJECTED: { label: '已驳回', type: 'info' },
-  CANCELLED: { label: '已撤销', type: 'info' },
+  CANCELLED: { label: '已撤销', type: 'default' },
 }
+
+const resourcePunishmentOptions = [
+  { label: '警告', value: 'WARNING' },
+  { label: '禁止上传资料', value: 'SUSPENSION' },
+]
+
+const userPunishmentOptions = [
+  { label: '警告', value: 'WARNING' },
+  { label: '禁言', value: 'MUTE' },
+]
 
 async function syncPendingReportsBaselineFromOverview() {
   try {
@@ -60,6 +89,7 @@ async function syncPendingReportsBaselineFromOverview() {
     const n = res.data?.stats?.pendingReports ?? 0
     localStorage.setItem('admin_last_pending_reports_count', String(n))
   } catch {
+    /* ignore */
   }
 }
 
@@ -69,7 +99,7 @@ async function loadResourceReports() {
     const res: any = await request.get<{ success: boolean; data: Report[] }>('/reports')
     resourceReports.value = res.data || []
   } catch {
-    ElMessage.error('加载资料举报列表失败')
+    message.error('加载资料举报列表失败')
   } finally {
     loading.value = false
   }
@@ -81,31 +111,28 @@ async function loadUserReports() {
     const res: any = await request.get<{ success: boolean; data: UserReport[] }>('/user-reports')
     userReports.value = res.data || []
   } catch {
-    ElMessage.error('加载用户举报列表失败')
+    message.error('加载用户举报列表失败')
   } finally {
     userReportsLoading.value = false
   }
 }
 
-function handleTabChange(tab: string) {
-  activeTab.value = tab
-  if (tab === 'resource') {
-    if (resourceReports.value.length === 0) {
-      loadResourceReports()
-    }
-  } else if (tab === 'user') {
-    if (userReports.value.length === 0) {
-      loadUserReports()
-    }
+function handleTabChange(tab: string | number) {
+  activeTab.value = String(tab)
+  if (activeTab.value === 'resource' && resourceReports.value.length === 0) {
+    void loadResourceReports()
+  } else if (activeTab.value === 'user' && userReports.value.length === 0) {
+    void loadUserReports()
   }
 }
 
 function openProcess(row: Report) {
   if (row.status !== 'PENDING') {
-    ElMessage.warning('举报已处理或已撤销')
+    message.warning('举报已处理或已撤销')
     return
   }
   currentReport.value = row
+  currentUserReport.value = null
   reviewReply.value = row.reviewReply || ''
   actionOption.value = 'REPLY'
   punishmentType.value = ''
@@ -139,7 +166,7 @@ async function submitProcess() {
     }
 
     if (needPunish && !punishmentType.value) {
-      ElMessage.warning('请选择处罚类型')
+      message.warning('请选择处罚类型')
       submitting.value = false
       return
     }
@@ -153,14 +180,14 @@ async function submitProcess() {
       punishmentDuration: needPunish ? punishmentDuration.value : undefined,
       punishmentReason: needPunish ? punishmentReason.value : undefined,
     })
-    ElMessage.success('处理完成')
+    message.success('处理完成')
     processDialogVisible.value = false
-    loadResourceReports()
+    void loadResourceReports()
   } catch (e: any) {
     const msg = e?.response?.data?.message || '处理失败'
-    ElMessage.error(msg)
+    message.error(msg)
     if (msg.includes('已处理') || msg.includes('已撤销')) {
-      loadResourceReports()
+      void loadResourceReports()
     }
   } finally {
     submitting.value = false
@@ -175,24 +202,26 @@ async function submitProcessDialog() {
   }
 }
 
-async function handleReopen(row: Report) {
+function handleReopen(row: Report) {
   if (row.status === 'PENDING') {
-    ElMessage.info('当前举报尚未处理，无需撤销')
+    message.info('当前举报尚未处理，无需撤销')
     return
   }
-  try {
-    await ElMessageBox.confirm(
-      '撤销后将清理本次处理产生的处罚记录，并将举报恢复为待处理状态，确认撤销？',
-      '撤销确认',
-      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
-    )
-    await request.put(`/reports/reopen`, null, { params: { reportId: row.id } })
-    ElMessage.success('已撤销本次处理，可重新操作')
-    loadResourceReports()
-  } catch (e: any) {
-    if (e === 'cancel') return
-    ElMessage.error(e?.response?.data?.message || '撤销失败')
-  }
+  dialog.warning({
+    title: '撤销确认',
+    content: '撤销后将清理本次处理产生的处罚记录，并将举报恢复为待处理状态，确认撤销？',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await request.put(`/reports/reopen`, null, { params: { reportId: row.id } })
+        message.success('已撤销本次处理，可重新操作')
+        void loadResourceReports()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '撤销失败')
+      }
+    },
+  })
 }
 
 function handleViewResource(row: Report) {
@@ -215,9 +244,7 @@ const sortedResourceReports = computed(() => {
     if (typeof va === 'number' && typeof vb === 'number') {
       return (va - vb) * factor
     }
-    const sa = String(va ?? '')
-    const sb = String(vb ?? '')
-    return sa.localeCompare(sb) * factor
+    return String(va ?? '').localeCompare(String(vb ?? '')) * factor
   })
 })
 
@@ -237,9 +264,7 @@ const sortedUserReports = computed(() => {
     if (typeof va === 'number' && typeof vb === 'number') {
       return (va - vb) * factor
     }
-    const sa = String(va ?? '')
-    const sb = String(vb ?? '')
-    return sa.localeCompare(sb) * factor
+    return String(va ?? '').localeCompare(String(vb ?? '')) * factor
   })
 })
 
@@ -250,10 +275,11 @@ function formatDate(dateStr?: string) {
 
 function openUserReportProcess(row: UserReport) {
   if (row.status !== 'PENDING') {
-    ElMessage.warning('举报已处理或已撤销')
+    message.warning('举报已处理或已撤销')
     return
   }
   currentUserReport.value = row
+  currentReport.value = null
   reviewReply.value = row.reviewReply || ''
   actionOption.value = 'REPLY'
   punishmentType.value = ''
@@ -284,7 +310,7 @@ async function submitUserReportProcess() {
     }
 
     if (needPunish && !punishmentType.value) {
-      ElMessage.warning('请选择处罚类型')
+      message.warning('请选择处罚类型')
       submitting.value = false
       return
     }
@@ -298,39 +324,47 @@ async function submitUserReportProcess() {
       punishmentDuration: needPunish ? punishmentDuration.value : undefined,
       punishmentReason: needPunish ? punishmentReason.value : undefined,
     })
-    ElMessage.success('处理完成')
+    message.success('处理完成')
     processDialogVisible.value = false
-    loadUserReports()
+    void loadUserReports()
   } catch (e: any) {
     const msg = e?.response?.data?.message || '处理失败'
-    ElMessage.error(msg)
+    message.error(msg)
     if (msg.includes('已处理') || msg.includes('已撤销')) {
-      loadUserReports()
+      void loadUserReports()
     }
   } finally {
     submitting.value = false
   }
 }
 
-async function handleReopenUserReport(row: UserReport) {
+function handleReopenUserReport(row: UserReport) {
   if (row.status === 'PENDING') {
-    ElMessage.info('当前举报尚未处理，无需撤销')
+    message.info('当前举报尚未处理，无需撤销')
     return
   }
-  try {
-    await ElMessageBox.confirm(
-      '撤销后将清理本次处理产生的处罚记录，并将举报恢复为待处理状态，确认撤销？',
-      '撤销确认',
-      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
-    )
-    await request.put(`/user-reports/reopen`, null, { params: { reportId: row.id } })
-    ElMessage.success('已撤销本次处理，可重新操作')
-    loadUserReports()
-  } catch (e: any) {
-    if (e === 'cancel') return
-    ElMessage.error(e?.response?.data?.message || '撤销失败')
-  }
+  dialog.warning({
+    title: '撤销确认',
+    content: '撤销后将清理本次处理产生的处罚记录，并将举报恢复为待处理状态，确认撤销？',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await request.put(`/user-reports/reopen`, null, { params: { reportId: row.id } })
+        message.success('已撤销本次处理，可重新操作')
+        void loadUserReports()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '撤销失败')
+      }
+    },
+  })
 }
+
+const showPunishFields = computed(
+  () =>
+    (activeTab.value === 'resource' && actionOption.value === 'HIDE_PUNISH') ||
+    (activeTab.value === 'user' && actionOption.value === 'PUNISH'),
+)
 
 onMounted(async () => {
   await Promise.all([loadResourceReports(), loadUserReports()])
@@ -339,423 +373,323 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="admin-reports-page">
-    <el-card class="reports-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <h3>举报管理</h3>
-            <p class="card-subtitle">管理系统所有举报记录</p>
-          </div>
-        </div>
-      </template>
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-        <el-tab-pane label="资料举报" name="resource">
-          <div v-loading="loading">
-            <div v-if="resourceReports.length === 0" class="empty-reports">
-              <el-empty description="暂无资料举报" />
-            </div>
-            <div v-else class="reports-list">
-              <div v-for="report in sortedResourceReports" :key="report.id" class="report-item">
-                <div class="report-icon-wrapper">
-                  <el-icon class="report-icon"><Document /></el-icon>
-                </div>
-                <div class="report-info">
-                  <div class="report-title">
-                    {{ report.resourceTitle || '（无标题/已删除）' }}
-                    <el-tag :type="statusMap[report.status]?.type || 'info'" size="small" style="margin-left: 8px">
-                      {{ statusMap[report.status]?.label || report.status }}
-                    </el-tag>
-                    <el-tag v-if="report.resourceVisibility === 'HIDDEN'" type="warning" size="small" style="margin-left: 8px">已隐藏</el-tag>
-                  </div>
-                  <div class="report-meta">
-                    <span>资料ID：{{ report.resourceId }}</span>
-                    <span>举报人ID：{{ report.userId }}</span>
-                    <span>举报原因：{{ report.reason }}</span>
-                    <span v-if="report.reviewReply">管理员回复：{{ report.reviewReply }}</span>
-                  </div>
-                </div>
-                <div class="report-right">
-                  <div class="report-actions">
-                    <el-button
-                      size="small"
-                      text
-                      type="info"
-                      :icon="View"
-                      @click.stop="handleViewResource(report)"
-                    >
-                      查看
-                    </el-button>
-                    <el-button
-                      size="small"
-                      text
-                      type="warning"
-                      :icon="Edit"
-                      :disabled="report.status !== 'PENDING'"
-                      @click.stop="openProcess(report)"
-                    >
-                      处理
-                    </el-button>
-                    <el-button
-                      size="small"
-                      text
-                      type="danger"
-                      :icon="Delete"
-                      :disabled="report.status === 'PENDING'"
-                      @click.stop="handleReopen(report)"
-                    >
-                      撤销
-                    </el-button>
-                  </div>
-                  <div class="report-time">
-                    <div>创建：{{ formatDate(report.createdAt) }}</div>
-                    <div v-if="report.reviewedAt">处理：{{ formatDate(report.reviewedAt) }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane label="用户举报" name="user">
-          <div v-loading="userReportsLoading">
-            <div v-if="userReports.length === 0" class="empty-reports">
-              <el-empty description="暂无用户举报" />
-            </div>
-            <div v-else class="reports-list">
-              <div v-for="report in sortedUserReports" :key="report.id" class="report-item">
-                <div class="report-icon-wrapper user-report-icon">
-                  <el-icon class="report-icon"><ChatDotRound /></el-icon>
-                </div>
-                <div class="report-info">
-                  <div class="report-title">
-                    被举报用户：{{ report.reportedUsername || `ID: ${report.reportedUserId}` }}
-                    <el-tag :type="statusMap[report.status]?.type || 'info'" size="small" style="margin-left: 8px">
-                      {{ statusMap[report.status]?.label || report.status }}
-                    </el-tag>
-                  </div>
-                  <div class="report-meta">
-                    <span>举报人ID：{{ report.userId }}</span>
-                    <span>举报原因：{{ report.reason }}</span>
-                    <span v-if="report.reviewReply">管理员回复：{{ report.reviewReply }}</span>
-                  </div>
-                </div>
-                <div class="report-right">
-                  <div class="report-actions">
-                    <el-button
-                      size="small"
-                      text
-                      type="warning"
-                      :icon="Edit"
-                      :disabled="report.status !== 'PENDING'"
-                      @click.stop="openUserReportProcess(report)"
-                    >
-                      处理
-                    </el-button>
-                    <el-button
-                      size="small"
-                      text
-                      type="danger"
-                      :icon="Delete"
-                      :disabled="report.status === 'PENDING'"
-                      @click.stop="handleReopenUserReport(report)"
-                    >
-                      撤销
-                    </el-button>
-                  </div>
-                  <div class="report-time">
-                    <div>创建：{{ formatDate(report.createdAt) }}</div>
-                    <div v-if="report.reviewedAt">处理：{{ formatDate(report.reviewedAt) }}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
+  <div class="page">
+    <PageHeader title="举报处理" subtitle="审核资料举报与用户举报" :show-back="false" />
 
-    <el-dialog v-model="processDialogVisible" :title="activeTab === 'resource' ? '处理资料举报' : '处理用户举报'" width="640px">
-      <div class="dialog-body" v-if="(activeTab === 'resource' && currentReport) || (activeTab === 'user' && currentUserReport)">
-        <p class="dialog-title" v-if="activeTab === 'resource' && currentReport">
+    <div class="glass-panel panel">
+      <NTabs v-model:value="activeTab" type="segment" animated @update:value="handleTabChange">
+        <NTabPane name="resource" tab="资料举报">
+          <NSpin :show="loading">
+            <NEmpty v-if="resourceReports.length === 0" description="暂无资料举报" />
+            <div v-else class="list">
+              <div v-for="report in sortedResourceReports" :key="report.id" class="item surface-card">
+                <div class="icon resource">
+                  <NIcon :size="22" :component="DocumentOutline" />
+                </div>
+                <div class="info">
+                  <div class="title">
+                    {{ report.resourceTitle || '（无标题/已删除）' }}
+                    <NTag
+                      :type="statusMap[report.status]?.type || 'info'"
+                      size="small"
+                      :bordered="false"
+                    >
+                      {{ statusMap[report.status]?.label || report.status }}
+                    </NTag>
+                    <NTag
+                      v-if="report.resourceVisibility === 'HIDDEN'"
+                      type="warning"
+                      size="small"
+                      :bordered="false"
+                    >
+                      已隐藏
+                    </NTag>
+                  </div>
+                  <div class="meta muted">
+                    <span>资料 ID：{{ report.resourceId }}</span>
+                    <span>举报人 ID：{{ report.userId }}</span>
+                    <span>原因：{{ report.reason }}</span>
+                    <span v-if="report.reviewReply">回复：{{ report.reviewReply }}</span>
+                  </div>
+                </div>
+                <div class="right">
+                  <NSpace :size="6">
+                    <NButton size="small" quaternary @click="handleViewResource(report)">
+                      <template #icon><NIcon :component="EyeOutline" /></template>
+                      查看
+                    </NButton>
+                    <NButton
+                      size="small"
+                      quaternary
+                      type="warning"
+                      :disabled="report.status !== 'PENDING'"
+                      @click="openProcess(report)"
+                    >
+                      <template #icon><NIcon :component="CreateOutline" /></template>
+                      处理
+                    </NButton>
+                    <NButton
+                      size="small"
+                      quaternary
+                      type="error"
+                      :disabled="report.status === 'PENDING'"
+                      @click="handleReopen(report)"
+                    >
+                      <template #icon><NIcon :component="TrashOutline" /></template>
+                      撤销
+                    </NButton>
+                  </NSpace>
+                  <div class="time muted">
+                    <div>创建：{{ formatDate(report.createdAt) }}</div>
+                    <div v-if="report.reviewedAt">处理：{{ formatDate(report.reviewedAt) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </NSpin>
+        </NTabPane>
+
+        <NTabPane name="user" tab="用户举报">
+          <NSpin :show="userReportsLoading">
+            <NEmpty v-if="userReports.length === 0" description="暂无用户举报" />
+            <div v-else class="list">
+              <div v-for="report in sortedUserReports" :key="report.id" class="item surface-card">
+                <div class="icon user">
+                  <NIcon :size="22" :component="ChatbubbleOutline" />
+                </div>
+                <div class="info">
+                  <div class="title">
+                    被举报用户：{{ report.reportedUsername || `ID: ${report.reportedUserId}` }}
+                    <NTag
+                      :type="statusMap[report.status]?.type || 'info'"
+                      size="small"
+                      :bordered="false"
+                    >
+                      {{ statusMap[report.status]?.label || report.status }}
+                    </NTag>
+                  </div>
+                  <div class="meta muted">
+                    <span>举报人 ID：{{ report.userId }}</span>
+                    <span>原因：{{ report.reason }}</span>
+                    <span v-if="report.reviewReply">回复：{{ report.reviewReply }}</span>
+                  </div>
+                </div>
+                <div class="right">
+                  <NSpace :size="6">
+                    <NButton
+                      size="small"
+                      quaternary
+                      type="warning"
+                      :disabled="report.status !== 'PENDING'"
+                      @click="openUserReportProcess(report)"
+                    >
+                      <template #icon><NIcon :component="CreateOutline" /></template>
+                      处理
+                    </NButton>
+                    <NButton
+                      size="small"
+                      quaternary
+                      type="error"
+                      :disabled="report.status === 'PENDING'"
+                      @click="handleReopenUserReport(report)"
+                    >
+                      <template #icon><NIcon :component="TrashOutline" /></template>
+                      撤销
+                    </NButton>
+                  </NSpace>
+                  <div class="time muted">
+                    <div>创建：{{ formatDate(report.createdAt) }}</div>
+                    <div v-if="report.reviewedAt">处理：{{ formatDate(report.reviewedAt) }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </NSpin>
+        </NTabPane>
+      </NTabs>
+    </div>
+
+    <NModal
+      v-model:show="processDialogVisible"
+      preset="card"
+      :title="activeTab === 'resource' ? '处理资料举报' : '处理用户举报'"
+      style="width: min(640px, 94vw)"
+      :bordered="false"
+    >
+      <div
+        v-if="(activeTab === 'resource' && currentReport) || (activeTab === 'user' && currentUserReport)"
+        class="dialog-body"
+      >
+        <p v-if="activeTab === 'resource' && currentReport" class="dialog-title muted">
           举报 ID：{{ currentReport.id }}，资料 ID：{{ currentReport.resourceId }}
         </p>
-        <p class="dialog-title" v-if="activeTab === 'user' && currentUserReport">
+        <p v-if="activeTab === 'user' && currentUserReport" class="dialog-title muted">
           举报 ID：{{ currentUserReport.id }}，被举报用户：{{ currentUserReport.reportedUsername }}
         </p>
-        <el-form label-width="110px">
-          <el-form-item label="处理动作">
-            <el-radio-group v-model="actionOption" class="action-radio-group">
-              <el-radio-button label="REJECT">驳回</el-radio-button>
-              <el-radio-button label="REPLY">仅回复</el-radio-button>
-              <el-radio-button v-if="activeTab === 'resource'" label="HIDE">隐藏资料</el-radio-button>
-              <el-radio-button v-if="activeTab === 'resource'" label="HIDE_PUNISH">隐藏并处罚</el-radio-button>
-              <el-radio-button v-if="activeTab === 'user'" label="PUNISH">处罚</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-          <el-form-item label="处罚类型" v-if="(activeTab === 'resource' && actionOption === 'HIDE_PUNISH') || (activeTab === 'user' && actionOption === 'PUNISH')">
-            <el-select v-model="punishmentType" placeholder="选择处罚类型" style="width: 260px">
-              <el-option v-if="activeTab === 'resource'" label="警告" value="WARNING" />
-              <el-option v-if="activeTab === 'resource'" label="禁止上传资料" value="SUSPENSION" />
-              <el-option v-if="activeTab === 'user'" label="警告" value="WARNING" />
-              <el-option v-if="activeTab === 'user'" label="禁言" value="MUTE" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="处罚时长(天)" v-if="(activeTab === 'resource' && actionOption === 'HIDE_PUNISH') || (activeTab === 'user' && actionOption === 'PUNISH')">
-            <el-input-number
-              v-model="punishmentDuration"
+
+        <NForm label-placement="left" label-width="110">
+          <NFormItem label="处理动作">
+            <NRadioGroup v-model:value="actionOption" size="small">
+              <NRadioButton value="REJECT">驳回</NRadioButton>
+              <NRadioButton value="REPLY">仅回复</NRadioButton>
+              <NRadioButton v-if="activeTab === 'resource'" value="HIDE">隐藏资料</NRadioButton>
+              <NRadioButton v-if="activeTab === 'resource'" value="HIDE_PUNISH">隐藏并处罚</NRadioButton>
+              <NRadioButton v-if="activeTab === 'user'" value="PUNISH">处罚</NRadioButton>
+            </NRadioGroup>
+          </NFormItem>
+          <NFormItem v-if="showPunishFields" label="处罚类型">
+            <NSelect
+              v-model:value="punishmentType"
+              :options="activeTab === 'resource' ? resourcePunishmentOptions : userPunishmentOptions"
+              placeholder="选择处罚类型"
+              style="width: 260px"
+            />
+          </NFormItem>
+          <NFormItem v-if="showPunishFields" label="处罚时长(天)">
+            <NInputNumber
+              v-model:value="punishmentDuration"
               :min="1"
               :max="365"
               placeholder="留空为永久"
-              class="punish-duration"
+              clearable
+              style="width: 200px"
             />
-          </el-form-item>
-          <el-form-item label="处罚说明" v-if="(activeTab === 'resource' && actionOption === 'HIDE_PUNISH') || (activeTab === 'user' && actionOption === 'PUNISH')">
-            <el-input v-model="punishmentReason" placeholder='可选，默认写入"举报处理处罚"' />
-          </el-form-item>
-        </el-form>
-        <el-input
-          v-model="reviewReply"
+          </NFormItem>
+          <NFormItem v-if="showPunishFields" label="处罚说明">
+            <NInput v-model:value="punishmentReason" placeholder='可选，默认写入"举报处理处罚"' />
+          </NFormItem>
+        </NForm>
+
+        <NInput
+          v-model:value="reviewReply"
           type="textarea"
           :rows="4"
           maxlength="500"
-          show-word-limit
+          show-count
           placeholder="填写管理员回复（最多500字）"
         />
       </div>
       <template #footer>
-        <el-button @click="processDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitProcessDialog">提交</el-button>
+        <NSpace justify="end">
+          <NButton @click="processDialogVisible = false">取消</NButton>
+          <NButton type="primary" :loading="submitting" @click="submitProcessDialog">提交</NButton>
+        </NSpace>
       </template>
-    </el-dialog>
-    </el-card>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.dialog-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.dialog-title {
-  margin: 0;
-  color: #606266;
-  font-size: 14px;
-}
-
-.muted {
-  color: #909399;
-}
-
-:deep(.action-radio-group) {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 6px;
-  align-items: center;
-}
-
-:deep(.action-radio-group .el-radio-button__inner) {
-  padding: 2px 8px;
-  min-width: 74px;
-  font-size: 12px;
-  border-radius: 14px !important;
-  border: 1px solid #dcdfe6;
-  background: #f6f7fb;
-  color: #606266;
-  box-sizing: border-box;
-}
-
-:deep(.action-radio-group .el-radio-button.is-active .el-radio-button__inner) {
-  background: var(--el-color-primary);
-  color: #fff;
-  border-color: var(--el-color-primary);
-}
-
-:deep(.action-radio-group .el-radio-button:nth-child(4) .el-radio-button__inner) {
-  border-color: #f56c6c;
-  color: #f56c6c;
-  background: #fff5f5;
-}
-
-:deep(.action-radio-group .el-radio-button:nth-child(4).is-active .el-radio-button__inner) {
-  background: #f56c6c;
-  color: #fff;
-  border-color: #f56c6c;
-}
-
-:deep(.punish-duration) {
-  width: 200px;
-}
-
-.admin-reports-page {
+.page {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
 }
 
-.reports-card {
-  margin-bottom: 24px;
+.panel {
+  padding: 18px 20px 22px;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header-left h3 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #1f2937;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.empty-reports {
-  padding: 40px;
-  text-align: center;
-}
-
-.reports-list {
+.list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 8px;
 }
 
-.report-item {
+.item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 14px 16px;
+  transition: border-color 0.2s ease, transform 0.15s ease;
 }
 
-.report-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
+.item:hover {
+  border-color: rgba(122, 158, 142, 0.35);
+  transform: translateY(-1px);
 }
 
-.report-icon-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  color: #fff;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(48, 207, 208, 0.25);
 }
 
-.report-icon-wrapper.user-report-icon {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  box-shadow: 0 4px 12px rgba(240, 147, 251, 0.25);
+.icon.resource {
+  background: linear-gradient(145deg, #7a9e8e, #5c8070);
 }
 
-.report-icon {
-  font-size: 24px;
-  color: #ffffff;
+.icon.user {
+  background: linear-gradient(145deg, #c4897e, #a86f66);
 }
 
-.report-info {
+.info {
   flex: 1;
   min-width: 0;
 }
 
-.report-title {
-  font-size: 16px;
+.title {
+  font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  margin-bottom: 6px;
 }
 
-.report-meta {
+.meta {
   font-size: 13px;
-  color: #6b7280;
   display: flex;
-  gap: 16px;
   flex-wrap: wrap;
+  gap: 12px;
 }
 
-.report-right {
+.right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex-shrink: 0;
 }
 
-.report-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.report-actions :deep(.el-button) {
-  height: 28px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.report-actions :deep(.el-button__icon) {
-  margin-right: 4px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.report-time {
-  font-size: 13px;
-  color: #9ca3af;
-  white-space: nowrap;
-  min-width: 160px;
+.time {
+  font-size: 12px;
   text-align: right;
+  min-width: 150px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.muted {
-  color: #909399;
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 13px;
 }
 
 @media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .report-item {
+  .item {
     flex-wrap: wrap;
   }
 
-  .report-right {
+  .right {
     width: 100%;
     justify-content: space-between;
-    margin-top: 8px;
+    flex-wrap: wrap;
   }
 
-  .report-time {
-    min-width: auto;
+  .time {
     text-align: left;
+    min-width: 0;
   }
 }
-
 </style>
-

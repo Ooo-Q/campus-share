@@ -1,112 +1,91 @@
 <script setup lang="ts">
-import { ArrowLeft } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
+import { NButton, NIcon } from 'naive-ui'
+import { ArrowBackOutline } from '@vicons/ionicons5'
+import { useRoute, useRouter } from 'vue-router'
 
-const props = defineProps<{
-  title: string
-  backPath?: string
-  showBack?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    title: string
+    subtitle?: string
+    backPath?: string
+    /** 默认 false：返回统一放在顶栏，避免重复；需要时再显式打开 */
+    showBack?: boolean
+  }>(),
+  {
+    showBack: false,
+  },
+)
 
 const router = useRouter()
+const route = useRoute()
 
 function handleBack() {
   if (props.backPath) {
     router.push(props.backPath)
-  } else {
-    const path = router.currentRoute.value.path
-    if (path.startsWith('/student')) {
-      router.push('/student')
-    } else if (path.startsWith('/admin')) {
-      router.push('/admin')
-    } else {
-      router.push('/login')
-    }
+    return
   }
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  const path = route.path
+  if (path.startsWith('/student')) router.push('/student')
+  else if (path.startsWith('/admin')) router.push('/admin')
+  else router.push('/login')
 }
 </script>
 
 <template>
   <div class="page-header">
-    <div v-if="showBack !== false" class="back-button" @click="handleBack">
-      <el-icon><ArrowLeft /></el-icon>
-      <span>返回</span>
+    <div class="left">
+      <NButton v-if="showBack" quaternary class="back" @click="handleBack">
+        <template #icon>
+          <NIcon :component="ArrowBackOutline" :size="18" />
+        </template>
+        返回
+      </NButton>
+      <div>
+        <h1 class="page-title">{{ title }}</h1>
+        <p v-if="subtitle" class="page-sub">{{ subtitle }}</p>
+      </div>
     </div>
-    <h1 class="page-title">{{ title }}</h1>
+    <div v-if="$slots.extra" class="extra">
+      <slot name="extra" />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .page-header {
   display: flex;
-  align-items: center;
-  gap: clamp(12px, 2vw, 16px);
-  margin-bottom: clamp(20px, 4vw, 32px);
-  padding-bottom: clamp(16px, 2.5vw, 20px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
 }
 
-.back-button {
+.left {
   display: flex;
-  align-items: center;
-  gap: clamp(4px, 1vw, 6px);
-  padding: clamp(6px, 1.5vw, 16px);
-  border-radius: clamp(8px, 1.25vw, 10px);
-  background: rgba(0, 0, 0, 0.03);
-  color: #666;
-  font-size: clamp(12px, 1.75vw, 14px);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 1px solid transparent;
-  white-space: nowrap;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.back {
+  margin-top: 2px;
+  background: rgba(255, 255, 255, 0.55) !important;
+  border-radius: 999px !important;
+  padding: 0 14px !important;
+  font-weight: 560;
+  color: var(--m-ink) !important;
   flex-shrink: 0;
 }
 
-.back-button:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #1a1a1a;
-  border-color: rgba(0, 0, 0, 0.08);
-  transform: translateX(-2px);
-}
-
-.page-title {
-  font-size: clamp(20px, 3.5vw, 28px);
-  font-weight: 700;
-  color: #1a1a1a;
-  margin: 0;
-  letter-spacing: -0.5px;
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
-}
-
-@media (max-width: 480px) {
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .page-title {
-    font-size: 20px;
-    width: 100%;
-  }
-  
-  .back-button {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
-}
-
-@media (min-width: 481px) and (max-width: 768px) {
-  .page-title {
-    font-size: 24px;
-  }
-  
-  .back-button {
-    padding: 6px 12px;
-    font-size: 13px;
-  }
+.extra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 </style>
-

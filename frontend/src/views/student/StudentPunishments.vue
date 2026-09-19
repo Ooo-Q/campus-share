@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Tools } from '@element-plus/icons-vue'
+import { NTag, NEmpty, NSpin, NIcon } from 'naive-ui'
+import { ConstructOutline } from '@vicons/ionicons5'
 import request from '../../api/request'
+import { message } from '../../utils/feedback'
+import PageHeader from '../../components/PageHeader.vue'
 
 interface Punishment {
   id: number
@@ -25,14 +27,14 @@ interface Punishment {
 const list = ref<Punishment[]>([])
 const loading = ref(false)
 
-const typeMap: Record<string, { label: string; color: string }> = {
-  WARNING: { label: '警告', color: '#e6a23c' },
-  SUSPENSION: { label: '禁止上传资料', color: '#f56c6c' },
-  MUTE: { label: '禁言', color: '#f56c6c' },
+const typeMap: Record<string, { label: string; type: 'warning' | 'error' | 'info' }> = {
+  WARNING: { label: '警告', type: 'warning' },
+  SUSPENSION: { label: '禁止上传资料', type: 'error' },
+  MUTE: { label: '禁言', type: 'error' },
 }
 
-const statusMap: Record<string, { label: string; type: string }> = {
-  ACTIVE: { label: '生效中', type: 'danger' },
+const statusMap: Record<string, { label: string; type: 'error' | 'default' }> = {
+  ACTIVE: { label: '生效中', type: 'error' },
 }
 
 async function load() {
@@ -42,7 +44,7 @@ async function load() {
     list.value = res.data || []
     localStorage.setItem('student_last_punishment_count', (list.value.length || 0).toString())
   } catch {
-    ElMessage.error('加载处罚记录失败')
+    message.error('加载处罚记录失败')
   } finally {
     loading.value = false
   }
@@ -67,7 +69,6 @@ function isHideOnly(p: Punishment) {
   )
 }
 
-
 function renderCardTitle(p: Punishment) {
   if (p.resourceTitle) return p.resourceTitle
   if (p.resourceId) return `资源 #${p.resourceId}`
@@ -80,38 +81,49 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="student-punishments-page">
-    <el-card class="punishments-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <h3>处罚记录</h3>
-            <p class="card-subtitle">查看所有处罚记录和状态</p>
-          </div>
-        </div>
-      </template>
+  <div class="page">
+    <PageHeader title="处罚记录" subtitle="查看所有处罚记录和状态" :show-back="false" />
 
-      <div v-loading="loading">
-        <div v-if="list.length === 0" class="empty-punishments">
-          <el-empty description="暂无处罚记录" />
-        </div>
-        <div v-else class="punishments-list">
-          <div v-for="punishment in list" :key="punishment.id" class="punishment-item">
-            <div class="punishment-icon-wrapper">
-              <el-icon class="punishment-icon"><Tools /></el-icon>
+    <div class="glass-panel list-panel">
+      <NSpin :show="loading">
+        <NEmpty v-if="list.length === 0" description="暂无处罚记录" />
+        <div v-else class="list">
+          <div v-for="punishment in list" :key="punishment.id" class="item surface-card">
+            <div class="icon">
+              <NIcon :size="22" :component="ConstructOutline" />
             </div>
-            <div class="punishment-info">
-              <div class="punishment-title">
+            <div class="info">
+              <div class="title">
                 {{ renderCardTitle(punishment) }}
-                <el-tag v-if="punishment.resourceId && isHideOnly(punishment)" type="warning" size="small" style="margin-left: 8px">已隐藏</el-tag>
-                <el-tag v-else-if="punishment.punishmentType" :color="typeMap[punishment.punishmentType]?.color" effect="dark" size="small" style="margin-left: 8px">
+                <NTag
+                  v-if="punishment.resourceId && isHideOnly(punishment)"
+                  type="warning"
+                  size="small"
+                  :bordered="false"
+                >
+                  已隐藏
+                </NTag>
+                <NTag
+                  v-else-if="punishment.punishmentType"
+                  :type="typeMap[punishment.punishmentType]?.type || 'info'"
+                  size="small"
+                  :bordered="false"
+                >
                   {{ typeMap[punishment.punishmentType]?.label || punishment.punishmentType }}
-                </el-tag>
-                <el-tag :type="statusMap[punishment.status]?.type || (isExpired(punishment) ? '' : 'danger')" size="small" style="margin-left: 8px">
-                  {{ isExpired(punishment) ? '已过期' : statusMap[punishment.status]?.label || punishment.status }}
-                </el-tag>
+                </NTag>
+                <NTag
+                  :type="isExpired(punishment) ? 'default' : statusMap[punishment.status]?.type || 'error'"
+                  size="small"
+                  :bordered="false"
+                >
+                  {{
+                    isExpired(punishment)
+                      ? '已过期'
+                      : statusMap[punishment.status]?.label || punishment.status
+                  }}
+                </NTag>
               </div>
-              <div class="punishment-meta">
+              <div class="meta muted">
                 <span>原因：{{ punishment.reason || '处罚记录' }}</span>
                 <span v-if="punishment.duration">时长：{{ punishment.duration }} 天</span>
                 <span v-else-if="punishment.punishmentType">时长：永久</span>
@@ -121,121 +133,73 @@ onMounted(load)
             </div>
           </div>
         </div>
-      </div>
-    </el-card>
+      </NSpin>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.student-punishments-page {
-  max-width: 1400px;
+.page {
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
+  width: 100%;
+  padding: clamp(12px, 2vw, 24px);
   box-sizing: border-box;
 }
 
-.punishments-card {
-  margin-bottom: 24px;
+.list-panel {
+  padding: 14px;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header-left h3 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #1f2937;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.empty-punishments {
-  padding: 40px;
-  text-align: center;
-}
-
-.punishments-list {
+.list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.punishment-item {
+.item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 14px 16px;
 }
 
-.punishment-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
-}
-
-.punishment-icon-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(196, 164, 132, 0.22);
+  color: var(--m-peach);
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(255, 236, 210, 0.25);
 }
 
-.punishment-icon {
-  font-size: 24px;
-  color: #ffffff;
-}
-
-.punishment-info {
+.info {
   flex: 1;
   min-width: 0;
 }
 
-.punishment-title {
-  font-size: 16px;
+.title {
+  font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.punishment-meta {
+.meta {
   font-size: 13px;
-  color: #6b7280;
   display: flex;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
-@media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .punishment-item {
-    flex-wrap: wrap;
+@media (max-width: 640px) {
+  .item {
+    align-items: flex-start;
   }
 }
 </style>
-
-

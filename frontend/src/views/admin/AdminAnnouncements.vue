@@ -1,8 +1,23 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Bell } from '@element-plus/icons-vue'
+import {
+  NButton,
+  NInput,
+  NModal,
+  NForm,
+  NFormItem,
+  NSpace,
+  NEmpty,
+  NSpin,
+  NCheckbox,
+  NIcon,
+  NSwitch,
+  NTag,
+} from 'naive-ui'
+import { AddOutline, CreateOutline, TrashOutline, NotificationsOutline } from '@vicons/ionicons5'
 import request from '../../api/request'
+import PageHeader from '../../components/PageHeader.vue'
+import { message, dialog } from '../../utils/feedback'
 
 interface Announcement {
   id: number
@@ -47,9 +62,7 @@ const sortedList = computed(() => {
     if (typeof va === 'number' && typeof vb === 'number') {
       return (va - vb) * factor
     }
-    const sa = String(va ?? '')
-    const sb = String(vb ?? '')
-    return sa.localeCompare(sb) * factor
+    return String(va ?? '').localeCompare(String(vb ?? '')) * factor
   })
 })
 
@@ -59,7 +72,7 @@ async function load() {
     const res = await request.get<{ success: boolean; data: Announcement[] }>('/announcements')
     list.value = res.data
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '加载公告列表失败')
+    message.error(e?.response?.data?.message || '加载公告列表失败')
   } finally {
     loading.value = false
   }
@@ -79,39 +92,40 @@ function openEdit(row: Announcement) {
 
 async function handleSubmit() {
   if (!form.title || !form.summary) {
-    ElMessage.warning('请填写标题和简介')
+    message.warning('请填写标题和简介')
     return
   }
-  if (editing.value) {
-    await request.put(`/announcements/${editing.value.id}`, form)
-    ElMessage.success('修改成功')
-  } else {
-    await request.post('/announcements', form)
-    ElMessage.success('创建成功')
-  }
-  dialogVisible.value = false
-  load()
-}
-
-async function handleDelete(row: Announcement) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除公告"${row.title}"吗？删除后无法恢复。`,
-      '删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-      }
-    )
-    await request.delete(`/announcements/${row.id}`)
-    ElMessage.success('删除成功')
+    if (editing.value) {
+      await request.put(`/announcements/${editing.value.id}`, form)
+      message.success('修改成功')
+    } else {
+      await request.post('/announcements', form)
+      message.success('创建成功')
+    }
+    dialogVisible.value = false
     load()
   } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
-    }
+    message.error(e?.response?.data?.message || '保存失败')
   }
+}
+
+function handleDelete(row: Announcement) {
+  dialog.warning({
+    title: '删除确认',
+    content: `确定要删除公告"${row.title}"吗？删除后无法恢复。`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await request.delete(`/announcements/${row.id}`)
+        message.success('删除成功')
+        load()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '删除失败')
+      }
+    },
+  })
 }
 
 function formatDate(dateStr?: string) {
@@ -123,215 +137,188 @@ const selectedAnnouncements = ref<number[]>([])
 
 function toggleSelect(id: number) {
   const index = selectedAnnouncements.value.indexOf(id)
-  if (index > -1) {
-    selectedAnnouncements.value.splice(index, 1)
-  } else {
-    selectedAnnouncements.value.push(id)
-  }
+  if (index > -1) selectedAnnouncements.value.splice(index, 1)
+  else selectedAnnouncements.value.push(id)
 }
 
 function toggleSelectAll() {
   if (selectedAnnouncements.value.length === list.value.length) {
     selectedAnnouncements.value = []
   } else {
-    selectedAnnouncements.value = list.value.map(a => a.id)
+    selectedAnnouncements.value = list.value.map((a) => a.id)
   }
 }
 
-async function handleBatchDelete() {
+function handleBatchDelete() {
   if (selectedAnnouncements.value.length === 0) {
-    ElMessage.warning('请选择要删除的公告')
+    message.warning('请选择要删除的公告')
     return
   }
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedAnnouncements.value.length} 个公告吗？`,
-      '删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+  dialog.warning({
+    title: '删除确认',
+    content: `确定要删除选中的 ${selectedAnnouncements.value.length} 个公告吗？`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        for (const id of selectedAnnouncements.value) {
+          await request.delete(`/announcements/${id}`)
+        }
+        message.success('删除成功')
+        selectedAnnouncements.value = []
+        load()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '删除失败')
       }
-    )
-    for (const id of selectedAnnouncements.value) {
-      await request.delete(`/announcements/${id}`)
-    }
-    ElMessage.success('删除成功')
-    selectedAnnouncements.value = []
-    load()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
-    }
-  }
+    },
+  })
 }
 
 onMounted(load)
 </script>
 
 <template>
-  <div class="admin-announcements-page">
-    <el-card class="announcements-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <h3>系统公告</h3>
-            <p class="card-subtitle">管理平台所有系统公告</p>
-          </div>
-          <div class="search-bar">
-            <el-button
-              v-if="selectedAnnouncements.length > 0"
-              type="danger"
-              @click="handleBatchDelete"
-            >
-              批量删除 ({{ selectedAnnouncements.length }})
-            </el-button>
-            <el-button type="primary" :icon="Plus" @click="openCreate" class="add-announcement-btn">发布公告</el-button>
-          </div>
-        </div>
+  <div class="page">
+    <PageHeader title="系统公告" subtitle="管理平台所有系统公告" :show-back="false">
+      <template #extra>
+        <NButton type="primary" @click="openCreate">
+          <template #icon>
+            <NIcon :component="AddOutline" />
+          </template>
+          发布公告
+        </NButton>
       </template>
+    </PageHeader>
 
-      <div v-loading="loading">
-        <div v-if="list.length === 0" class="empty-announcements">
-          <el-empty description="暂无公告" />
+    <div class="glass-panel toolbar">
+      <NButton
+        v-if="selectedAnnouncements.length > 0"
+        type="error"
+        secondary
+        @click="handleBatchDelete"
+      >
+        批量删除 ({{ selectedAnnouncements.length }})
+      </NButton>
+      <span v-else class="muted">选择公告后可批量删除</span>
+    </div>
+
+    <div class="glass-panel table-wrap">
+      <NSpin :show="loading">
+        <div v-if="list.length === 0" class="empty-wrap">
+          <NEmpty description="暂无公告" />
         </div>
-        <div v-else class="announcements-list">
+        <div v-else class="item-list">
           <div class="list-header">
-            <el-checkbox
-              :model-value="selectedAnnouncements.length === list.length && list.length > 0"
-              @change="toggleSelectAll"
-              class="select-all-checkbox"
+            <NCheckbox
+              :checked="selectedAnnouncements.length === list.length && list.length > 0"
+              :indeterminate="
+                selectedAnnouncements.length > 0 && selectedAnnouncements.length < list.length
+              "
+              @update:checked="toggleSelectAll"
             />
-            <span class="list-header-text">全选</span>
+            <span class="muted">全选</span>
           </div>
-          <div v-for="announcement in sortedList" :key="announcement.id" class="announcement-item">
-            <el-checkbox
-              :model-value="selectedAnnouncements.includes(announcement.id)"
-              @change="toggleSelect(announcement.id)"
-              class="announcement-checkbox"
+          <div
+            v-for="announcement in sortedList"
+            :key="announcement.id"
+            class="surface-card list-item"
+          >
+            <NCheckbox
+              :checked="selectedAnnouncements.includes(announcement.id)"
+              @update:checked="() => toggleSelect(announcement.id)"
             />
-            <div class="announcement-icon-wrapper">
-              <el-icon class="announcement-icon"><Bell /></el-icon>
+            <div class="icon-wrap">
+              <NIcon :component="NotificationsOutline" :size="24" />
             </div>
-            <div class="announcement-info">
-              <div class="announcement-title">
+            <div class="item-info">
+              <div class="item-title">
                 {{ announcement.title }}
-                <el-tag v-if="announcement.pinned" type="warning" size="small" style="margin-left: 8px">置顶</el-tag>
+                <NTag v-if="announcement.pinned" type="warning" size="small" :bordered="false">
+                  置顶
+                </NTag>
               </div>
-              <div class="announcement-meta">
+              <div class="item-meta muted">
                 <span>简介：{{ announcement.summary || '-' }}</span>
               </div>
             </div>
-            <div class="announcement-right">
-              <div class="announcement-actions">
-                <el-button
-                  size="small"
-                  text
-                  type="info"
-                  :icon="Edit"
-                  @click.stop="openEdit(announcement)"
-                >
+            <div class="item-right">
+              <NSpace :size="8">
+                <NButton size="small" quaternary @click="openEdit(announcement)">
+                  <template #icon>
+                    <NIcon :component="CreateOutline" />
+                  </template>
                   编辑
-                </el-button>
-                <el-button
-                  size="small"
-                  text
-                  type="danger"
-                  :icon="Delete"
-                  @click.stop="handleDelete(announcement)"
-                >
+                </NButton>
+                <NButton size="small" quaternary type="error" @click="handleDelete(announcement)">
+                  <template #icon>
+                    <NIcon :component="TrashOutline" />
+                  </template>
                   删除
-                </el-button>
-              </div>
-              <div class="announcement-time">{{ formatDate(announcement.publishAt) }}</div>
+                </NButton>
+              </NSpace>
+              <div class="item-time muted">{{ formatDate(announcement.publishAt) }}</div>
             </div>
           </div>
         </div>
-      </div>
+      </NSpin>
+    </div>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑公告' : '发布公告'" width="560px">
-      <el-form label-width="80px">
-        <el-form-item label="标题">
-          <el-input v-model="form.title" />
-        </el-form-item>
-        <el-form-item label="简介">
-          <el-input v-model="form.summary" />
-        </el-form-item>
-        <el-form-item label="内容">
-          <el-input v-model="form.content" type="textarea" :rows="6" />
-        </el-form-item>
-        <el-form-item label="置顶">
-          <el-switch v-model="form.pinned" />
-        </el-form-item>
-      </el-form>
+    <NModal
+      v-model:show="dialogVisible"
+      preset="card"
+      :title="editing ? '编辑公告' : '发布公告'"
+      style="width: 560px; max-width: 94vw"
+      :bordered="false"
+    >
+      <NForm label-placement="left" label-width="80">
+        <NFormItem label="标题">
+          <NInput v-model:value="form.title" placeholder="请输入标题" />
+        </NFormItem>
+        <NFormItem label="简介">
+          <NInput v-model:value="form.summary" placeholder="请输入简介" />
+        </NFormItem>
+        <NFormItem label="内容">
+          <NInput v-model:value="form.content" type="textarea" :rows="6" placeholder="请输入内容" />
+        </NFormItem>
+        <NFormItem label="置顶">
+          <NSwitch v-model:value="form.pinned" />
+        </NFormItem>
+      </NForm>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <NSpace justify="end">
+          <NButton @click="dialogVisible = false">取消</NButton>
+          <NButton type="primary" @click="handleSubmit">保存</NButton>
+        </NSpace>
       </template>
-    </el-dialog>
-    </el-card>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.admin-announcements-page {
+.page {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
 }
 
-.announcements-card {
-  margin-bottom: 24px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header-left h3 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #1f2937;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.search-bar {
+.toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  min-height: 56px;
 }
 
-.add-announcement-btn {
-  border-radius: 10px;
-  height: 40px !important;
-  min-height: 40px !important;
-  max-height: 40px !important;
-  padding: 0 20px;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.table-wrap {
+  padding: 16px 20px 20px;
 }
 
-.empty-announcements {
-  padding: 40px;
-  text-align: center;
+.empty-wrap {
+  padding: 48px 0;
 }
 
-.announcements-list {
+.item-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -341,144 +328,82 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  margin-bottom: 4px;
+  padding: 8px 12px;
+  border-radius: var(--m-radius-sm);
+  background: rgba(255, 255, 255, 0.35);
 }
 
-.select-all-checkbox {
-  flex-shrink: 0;
-}
-
-.list-header-text {
-  font-size: 14px;
-  color: #6b7280;
-}
-
-.announcement-item {
+.list-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 14px 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.announcement-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
+.list-item:hover {
+  border-color: rgba(122, 158, 142, 0.35);
+  box-shadow: var(--m-shadow-soft);
 }
 
-.announcement-checkbox {
-  flex-shrink: 0;
-}
-
-.announcement-icon-wrapper {
+.icon-wrap {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+  border-radius: 14px;
+  background: linear-gradient(145deg, var(--m-sage-wash), var(--m-sage));
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(168, 237, 234, 0.25);
 }
 
-.announcement-icon {
-  font-size: 24px;
-  color: #ffffff;
-}
-
-.announcement-info {
+.item-info {
   flex: 1;
   min-width: 0;
 }
 
-.announcement-title {
+.item-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--m-ink);
   margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
-.announcement-meta {
+.item-meta {
   font-size: 13px;
-  color: #6b7280;
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
 }
 
-.announcement-right {
+.item-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   flex-shrink: 0;
 }
 
-.announcement-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.announcement-actions :deep(.el-button) {
-  height: 28px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.announcement-actions :deep(.el-button__icon) {
-  margin-right: 4px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.announcement-time {
+.item-time {
   font-size: 13px;
-  color: #9ca3af;
   white-space: nowrap;
-  min-width: 160px;
+  min-width: 150px;
   text-align: right;
 }
 
 @media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .search-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-bar > * {
-    width: 100%;
-  }
-
-  .announcement-item {
+  .list-item {
     flex-wrap: wrap;
   }
 
-  .announcement-right {
+  .item-right {
     width: 100%;
     justify-content: space-between;
-    margin-top: 8px;
+    margin-top: 4px;
   }
 
-  .announcement-time {
+  .item-time {
     min-width: auto;
     text-align: left;
   }

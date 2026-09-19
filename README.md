@@ -11,7 +11,7 @@
 | 分类 | 内容 |
 |------|------|
 | 后端 | Java 21、Spring Boot 3、MyBatis、MySQL 8、Redis 7、JWT |
-| 前端 | Vue 3、TypeScript、Vite、Element Plus、Pinia、Axios |
+| 前端 | Vue 3、TypeScript、Vite、Naive UI、Pinia、Axios |
 | 部署 | Docker、Docker Compose、Nginx、GitHub Actions、GHCR |
 
 ## 2. 功能说明

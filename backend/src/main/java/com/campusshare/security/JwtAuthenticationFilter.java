@@ -46,6 +46,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (path == null) {
             return false;
         }
+        String contextPath = request.getContextPath();
+        if (contextPath != null && !contextPath.isEmpty() && path.startsWith(contextPath)) {
+            path = path.substring(contextPath.length());
+            if (path.isEmpty()) {
+                path = "/";
+            }
+        }
         final String finalPath = path;
         return WHITELIST.stream()
                 .anyMatch(pattern -> pattern != null && matcher.match(pattern, finalPath));

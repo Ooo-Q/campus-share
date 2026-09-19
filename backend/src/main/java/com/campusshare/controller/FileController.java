@@ -146,10 +146,21 @@ public class FileController {
 
         String originalFileName = file.getName();
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + encodeFileName(originalFileName) + "\"")
+        // Images must be served without attachment disposition so <img> can display them
+        var responseBuilder = ResponseEntity.ok()
                 .contentLength(file.length())
-                .contentType(MediaType.parseMediaType(contentType))
+                .contentType(MediaType.parseMediaType(contentType));
+
+        if (contentType.startsWith("image/")) {
+            return responseBuilder
+                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+                    .body(resource);
+        }
+
+        return responseBuilder
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + encodeFileName(originalFileName) + "\"")
                 .body(resource);
     }
 

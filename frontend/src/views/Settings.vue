@@ -1,10 +1,32 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { User } from '@element-plus/icons-vue'
-import { getProfile, updateProfile, changePassword, changeUsername, uploadAvatar, type UpdateProfilePayload } from '../api/auth'
+import {
+  NButton,
+  NForm,
+  NFormItem,
+  NInput,
+  NModal,
+  NRadio,
+  NRadioGroup,
+  NSpin,
+  NTabPane,
+  NTabs,
+  NTag,
+} from 'naive-ui'
+import {
+  getProfile,
+  updateProfile,
+  changePassword,
+  changeUsername,
+  uploadAvatar,
+  type UpdateProfilePayload,
+} from '../api/auth'
 import { useUserStore } from '../stores/user'
+import { message, dialog } from '../utils/feedback'
+import { getAvatarUrl } from '../utils/resource'
+import PageHeader from '../components/PageHeader.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -24,40 +46,65 @@ const profileForm = reactive({
 
 const avatarUploading = ref(false)
 const avatarPreview = ref('')
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
 function clearAvatar() {
   profileForm.avatar = ''
   avatarPreview.value = ''
 }
 
+function beforeAvatarUpload(file: File) {
+  const isImage = file.type.startsWith('image/')
+  const isLt5M = file.size / 1024 / 1024 < 5
+  if (!isImage) {
+    message.error('只能上传图片文件!')
+    return false
+  }
+  if (!isLt5M) {
+    message.error('图片大小不能超过5MB!')
+    return false
+  }
+  return true
+}
+
 async function handleAvatarUpload(file: File) {
+  if (!beforeAvatarUpload(file)) return
   avatarUploading.value = true
   try {
     const res: any = await uploadAvatar(file)
     if (res.success && res.data) {
       profileForm.avatar = res.data
-      avatarPreview.value = `/api${res.data}`
-      ElMessage.success('头像上传成功')
+      avatarPreview.value = getAvatarUrl(res.data) || ''
+      // 上传后立即写入资料，避免只上传未保存导致各处仍无头像
+      const saveRes: any = await updateProfile({
+        nickname: profileForm.nickname || userStore.user?.nickname || userStore.user?.username,
+        avatar: res.data,
+        email: profileForm.email || undefined,
+        phone: profileForm.phone || undefined,
+        gender: profileForm.gender || undefined,
+      })
+      if (saveRes.success) {
+        userStore.patchUser({
+          nickname: saveRes.data?.nickname || profileForm.nickname,
+          avatar: res.data,
+        })
+        message.success('头像已更新')
+      } else {
+        message.warning('头像已上传，请再点击保存资料')
+      }
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '头像上传失败')
+    message.error(error.response?.data?.message || '头像上传失败')
   } finally {
     avatarUploading.value = false
   }
 }
 
-function beforeAvatarUpload(file: File) {
-  const isImage = file.type.startsWith('image/')
-  const isLt5M = file.size / 1024 / 1024 < 5
-  if (!isImage) {
-    ElMessage.error('只能上传图片文件!')
-    return false
-  }
-  if (!isLt5M) {
-    ElMessage.error('图片大小不能超过5MB!')
-    return false
-  }
-  return true
+function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (file) void handleAvatarUpload(file)
+  input.value = ''
 }
 
 const passwordForm = reactive({
@@ -82,12 +129,14 @@ async function loadUserInfo() {
       profileForm.phone = res.data.phone || ''
       profileForm.gender = res.data.gender || ''
       profileForm.avatar = res.data.avatar || ''
-      if (res.data.avatar) {
-        avatarPreview.value = `/api${res.data.avatar}`
-      }
+      avatarPreview.value = getAvatarUrl(res.data.avatar) || ''
+      userStore.patchUser({
+        nickname: res.data.nickname || userStore.user?.nickname,
+        avatar: res.data.avatar || undefined,
+      })
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '加载用户信息失败')
+    message.error(error.response?.data?.message || '加载用户信息失败')
   } finally {
     loading.value = false
   }
@@ -95,22 +144,22 @@ async function loadUserInfo() {
 
 async function handleSaveProfile() {
   if (!profileForm.nickname) {
-    ElMessage.warning('请输入昵称')
+    message.warning('请输入昵称')
     return
   }
   loading.value = true
   try {
     const res: any = await updateProfile(profileForm as UpdateProfilePayload)
     if (res.success && res.data) {
-      ElMessage.success('保存成功')
-      if (userStore.user) {
-        userStore.user.nickname = res.data.nickname
-        userStore.user.avatar = res.data.avatar
-      }
+      message.success('保存成功')
+      userStore.patchUser({
+        nickname: res.data.nickname,
+        avatar: res.data.avatar,
+      })
       await loadUserInfo()
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '保存失败')
+    message.error(error.response?.data?.message || '保存失败')
   } finally {
     loading.value = false
   }
@@ -118,15 +167,15 @@ async function handleSaveProfile() {
 
 async function handleChangePassword() {
   if (!passwordForm.oldPassword || !passwordForm.newPassword) {
-    ElMessage.warning('请填写完整信息')
+    message.warning('请填写完整信息')
     return
   }
   if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-    ElMessage.warning('两次输入的新密码不一致')
+    message.warning('两次输入的新密码不一致')
     return
   }
   if (passwordForm.newPassword.length < 6) {
-    ElMessage.warning('新密码长度至少6位')
+    message.warning('新密码长度至少6位')
     return
   }
   loading.value = true
@@ -136,209 +185,250 @@ async function handleChangePassword() {
       newPassword: passwordForm.newPassword,
     })
     if (res.success) {
-      ElMessage.success('密码修改成功，请重新登录')
+      message.success('密码修改成功，请重新登录')
       userStore.clear()
       window.location.href = '/login'
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.message || '密码修改失败')
+    message.error(error.response?.data?.message || '密码修改失败')
   } finally {
     loading.value = false
   }
 }
 
-async function handleChangeUsername() {
+function handleChangeUsername() {
   if (!usernameForm.newUsername) {
-    ElMessage.warning('请输入新用户名')
+    message.warning('请输入新用户名')
     return
   }
   if (usernameForm.newUsername === userInfo.value?.username) {
-    ElMessage.warning('新用户名不能与当前用户名相同')
+    message.warning('新用户名不能与当前用户名相同')
     return
   }
-  ElMessageBox.confirm('修改用户名后需要重新登录，确定要继续吗？', '确认修改', {
-    type: 'warning',
-  })
-    .then(async () => {
+  dialog.warning({
+    title: '确认修改',
+    content: '修改用户名后需要重新登录，确定要继续吗？',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
       loading.value = true
       try {
         const res: any = await changeUsername({ newUsername: usernameForm.newUsername })
         if (res.success && res.data) {
-          ElMessage.success('用户名修改成功，请重新登录')
+          message.success('用户名修改成功，请重新登录')
           usernameDialogVisible.value = false
           userStore.clear()
           window.location.href = '/login'
         }
       } catch (error: any) {
-        ElMessage.error(error.response?.data?.message || '用户名修改失败')
+        message.error(error.response?.data?.message || '用户名修改失败')
       } finally {
         loading.value = false
       }
-    })
-    .catch(() => {})
+    },
+  })
+}
+
+function handleTabChange(name: string | number) {
+  router.replace({ query: { tab: String(name) } })
 }
 
 onMounted(loadUserInfo)
 </script>
 
 <template>
-  <div class="settings-page" v-loading="loading">
-    <el-card>
-      <el-tabs v-model="activeTab" @tab-change="(name: string | number) => router.replace({ query: { tab: String(name) } })">
-        <el-tab-pane label="个人信息" name="profile">
-          <el-form :model="profileForm" label-width="100px" style="max-width: 600px">
-            <el-form-item label="头像">
-              <div class="avatar-upload">
-                <el-avatar :size="100" :src="avatarPreview">
-                  <el-icon :size="50"><User /></el-icon>
-                </el-avatar>
-                <el-upload
-                  :show-file-list="false"
-                  :before-upload="beforeAvatarUpload"
-                  :http-request="(options: any) => handleAvatarUpload(options.file)"
-                  class="avatar-uploader"
-                >
-                  <el-button :loading="avatarUploading">上传头像</el-button>
-                </el-upload>
-                <el-button v-if="profileForm.avatar" @click="clearAvatar">清除</el-button>
+  <div class="settings-page">
+    <PageHeader title="账户设置" subtitle="管理个人资料与安全选项" />
+
+    <NSpin :show="loading">
+      <div class="settings-panel glass-panel-strong">
+        <NTabs v-model:value="activeTab" type="segment" animated @update:value="handleTabChange">
+          <NTabPane name="profile" tab="个人信息">
+            <NForm class="settings-form" label-placement="left" label-width="88">
+              <NFormItem label="头像">
+                <div class="avatar-upload">
+                  <UserAvatar
+                    :src="avatarPreview || profileForm.avatar"
+                    :name="profileForm.nickname || userStore.user?.nickname"
+                    :size="96"
+                  />
+                  <input
+                    ref="fileInputRef"
+                    type="file"
+                    accept="image/*"
+                    class="hidden-file"
+                    @change="onFileChange"
+                  />
+                  <NButton :loading="avatarUploading" @click="fileInputRef?.click()">上传头像</NButton>
+                  <NButton v-if="profileForm.avatar" quaternary @click="clearAvatar">清除</NButton>
+                </div>
+              </NFormItem>
+              <NFormItem label="昵称" required>
+                <NInput v-model:value="profileForm.nickname" placeholder="请输入昵称" round />
+              </NFormItem>
+              <NFormItem label="邮箱">
+                <NInput v-model:value="profileForm.email" type="text" placeholder="请输入邮箱" round />
+              </NFormItem>
+              <NFormItem label="手机号">
+                <NInput v-model:value="profileForm.phone" placeholder="请输入手机号" round />
+              </NFormItem>
+              <NFormItem label="性别">
+                <NRadioGroup v-model:value="profileForm.gender">
+                  <NRadio value="MALE">男</NRadio>
+                  <NRadio value="FEMALE">女</NRadio>
+                  <NRadio value="OTHER">其他</NRadio>
+                </NRadioGroup>
+              </NFormItem>
+              <NFormItem :show-label="false">
+                <NButton type="primary" @click="handleSaveProfile">保存</NButton>
+              </NFormItem>
+            </NForm>
+          </NTabPane>
+
+          <NTabPane name="security" tab="账户安全">
+            <div class="security-content">
+              <div class="security-section surface-card">
+                <h3 class="section-title">修改密码</h3>
+                <NForm class="settings-form" label-placement="left" label-width="100">
+                  <NFormItem label="当前密码" required>
+                    <NInput
+                      v-model:value="passwordForm.oldPassword"
+                      type="password"
+                      show-password-on="click"
+                      placeholder="请输入当前密码"
+                      round
+                    />
+                  </NFormItem>
+                  <NFormItem label="新密码" required>
+                    <NInput
+                      v-model:value="passwordForm.newPassword"
+                      type="password"
+                      show-password-on="click"
+                      placeholder="请输入新密码（至少6位）"
+                      round
+                    />
+                  </NFormItem>
+                  <NFormItem label="确认新密码" required>
+                    <NInput
+                      v-model:value="passwordForm.confirmPassword"
+                      type="password"
+                      show-password-on="click"
+                      placeholder="请再次输入新密码"
+                      round
+                    />
+                  </NFormItem>
+                  <NFormItem :show-label="false">
+                    <NButton type="primary" @click="handleChangePassword">修改密码</NButton>
+                  </NFormItem>
+                </NForm>
               </div>
-            </el-form-item>
-            <el-form-item label="昵称" required>
-              <el-input v-model="profileForm.nickname" placeholder="请输入昵称" />
-            </el-form-item>
-            <el-form-item label="邮箱">
-              <el-input v-model="profileForm.email" type="email" placeholder="请输入邮箱" />
-            </el-form-item>
-            <el-form-item label="手机号">
-              <el-input v-model="profileForm.phone" placeholder="请输入手机号" />
-            </el-form-item>
-            <el-form-item label="性别">
-              <el-radio-group v-model="profileForm.gender">
-                <el-radio label="MALE">男</el-radio>
-                <el-radio label="FEMALE">女</el-radio>
-                <el-radio label="OTHER">其他</el-radio>
-              </el-radio-group>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="handleSaveProfile">保存</el-button>
-            </el-form-item>
-          </el-form>
-        </el-tab-pane>
 
-        <el-tab-pane label="账户安全" name="security">
-          <div class="security-content">
-            <div class="security-section">
-              <h3 class="section-title">修改密码</h3>
-              <el-form :model="passwordForm" label-width="120px" class="security-form">
-                <el-form-item label="当前密码" required>
-                  <el-input v-model="passwordForm.oldPassword" type="password" show-password placeholder="请输入当前密码" />
-                </el-form-item>
-                <el-form-item label="新密码" required>
-                  <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="请输入新密码（至少6位）" />
-                </el-form-item>
-                <el-form-item label="确认新密码" required>
-                  <el-input v-model="passwordForm.confirmPassword" type="password" show-password placeholder="请再次输入新密码" />
-                </el-form-item>
-                <el-form-item>
-                  <el-button type="primary" @click="handleChangePassword">修改密码</el-button>
-                </el-form-item>
-              </el-form>
+              <div class="security-section surface-card">
+                <h3 class="section-title">修改用户名</h3>
+                <NForm class="settings-form" label-placement="left" label-width="100">
+                  <NFormItem label="当前用户名">
+                    <NTag size="large" round :bordered="false" type="info">
+                      {{ userInfo?.username }}
+                    </NTag>
+                  </NFormItem>
+                  <NFormItem :show-label="false">
+                    <div class="username-row">
+                      <NButton type="warning" @click="usernameDialogVisible = true">修改用户名</NButton>
+                      <span class="username-tip">修改用户名后需要重新登录</span>
+                    </div>
+                  </NFormItem>
+                </NForm>
+              </div>
             </div>
+          </NTabPane>
+        </NTabs>
+      </div>
+    </NSpin>
 
-            <div class="security-section">
-              <h3 class="section-title">修改用户名</h3>
-              <el-form label-width="120px" class="security-form">
-                <el-form-item label="当前用户名">
-                  <div class="username-display">
-                    <el-tag type="info" size="large">{{ userInfo?.username }}</el-tag>
-                  </div>
-                </el-form-item>
-                <el-form-item>
-                  <el-button type="warning" @click="usernameDialogVisible = true">修改用户名</el-button>
-                  <span class="username-tip">修改用户名后需要重新登录</span>
-                </el-form-item>
-              </el-form>
-            </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
-
-    <el-dialog v-model="usernameDialogVisible" title="修改用户名" width="500px">
-      <el-form :model="usernameForm" label-width="100px">
-        <el-form-item label="新用户名" required>
-          <el-input v-model="usernameForm.newUsername" placeholder="请输入新用户名" />
-        </el-form-item>
-      </el-form>
+    <NModal
+      v-model:show="usernameDialogVisible"
+      preset="card"
+      title="修改用户名"
+      class="glass-modal"
+      style="width: min(460px, 92vw)"
+    >
+      <NForm label-placement="left" label-width="88">
+        <NFormItem label="新用户名" required>
+          <NInput v-model:value="usernameForm.newUsername" placeholder="请输入新用户名" round />
+        </NFormItem>
+      </NForm>
       <template #footer>
-        <el-button @click="usernameDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleChangeUsername">确定</el-button>
+        <div class="modal-footer">
+          <NButton @click="usernameDialogVisible = false">取消</NButton>
+          <NButton type="primary" @click="handleChangeUsername">确定</NButton>
+        </div>
       </template>
-    </el-dialog>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
 .settings-page {
-  max-width: 1400px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
+  padding: clamp(12px, 2vw, 28px);
+}
+
+.settings-panel {
+  padding: 22px 24px 28px;
+}
+
+.settings-form {
+  max-width: 560px;
+  margin-top: 8px;
 }
 
 .avatar-upload {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.hidden-file {
+  display: none;
 }
 
 .security-content {
-  max-width: 600px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 18px;
+  margin-top: 8px;
 }
 
 .security-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  padding: 20px 22px;
 }
 
 .section-title {
-  font-size: clamp(16px, 2vw, 18px);
+  margin: 0 0 16px;
+  font-size: 17px;
   font-weight: 600;
-  color: #1f2937;
-  margin: 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  color: var(--m-ink);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--m-stroke);
 }
 
-.security-form {
-  margin-top: 0;
-}
-
-.username-display {
+.username-row {
   display: flex;
   align-items: center;
-  padding: 4px 0;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .username-tip {
-  margin-left: 12px;
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--m-ink-muted);
 }
 
-@media (max-width: 768px) {
-  .security-content {
-    gap: 24px;
-  }
-  
-  .security-section {
-    gap: 16px;
-  }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>
-

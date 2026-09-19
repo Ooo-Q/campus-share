@@ -5,7 +5,7 @@ import type {
   InternalAxiosRequestConfig,
   AxiosResponse,
 } from 'axios'
-import { ElMessage } from 'element-plus'
+import { message } from '../utils/feedback'
 import { useUserStore } from '../stores/user'
 
 const instance = axios.create({
@@ -32,7 +32,7 @@ instance.interceptors.response.use(
     if (data && data.success === false) {
       const silent = (response.config as InternalAxiosRequestConfig & { silent?: boolean }).silent
       if (!silent) {
-        ElMessage.error(data.message || '请求失败')
+        message.error(data.message || '请求失败')
       }
       return Promise.reject(new Error(data.message || '请求失败'))
     }
@@ -63,7 +63,7 @@ instance.interceptors.response.use(
             message: error.message,
           })
         }
-        ElMessage.error(error.response?.data?.message || error.message || '请求出错')
+        message.error(error.response?.data?.message || error.message || '请求出错')
       }
     }
     return Promise.reject(error)

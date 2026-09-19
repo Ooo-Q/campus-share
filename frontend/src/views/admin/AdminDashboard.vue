@@ -1,17 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref, computed, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { NButton, NIcon, NSpin } from 'naive-ui'
 import {
-  User,
-  School,
-  Document,
-  Folder,
-  ChatDotRound,
-  Setting,
-  UserFilled,
-  Message,
-  Bell,
-} from '@element-plus/icons-vue'
+  FlagOutline,
+  ChatbubblesOutline,
+  ChevronForwardOutline,
+} from '@vicons/ionicons5'
 import request from '../../api/request'
 import { getUnreadCount } from '../../api/message'
 import { getAllRequests } from '../../api/friend'
@@ -25,6 +20,7 @@ const stats = reactive({
   pendingReports: 0,
   unreadMessageCount: 0,
   pendingFriendRequestCount: 0,
+  totalPendingReports: 0,
 })
 
 function getLastRecordedPendingReports(): number | null {
@@ -38,42 +34,38 @@ function recordCurrentPendingReports(count: number) {
 
 function getNewPendingReports(currentCount: number): number {
   const lastCount = getLastRecordedPendingReports()
-
-  if (lastCount === null) {
-    return currentCount
-  }
-
+  if (lastCount === null) return currentCount
   if (currentCount < lastCount) {
     recordCurrentPendingReports(currentCount)
     return 0
   }
-
   return Math.max(0, currentCount - lastCount)
 }
 
 async function loadDashboard() {
   loading.value = true
   try {
-    const res = await request.get<{ success: boolean; data: { stats?: { pendingReports?: number } } }>('/admin/overview')
-    const overviewStats = res.data?.stats || {}
-
-    const totalPendingReports = overviewStats.pendingReports || 0
+    const res = await request.get<{ success: boolean; data: { stats?: { pendingReports?: number } } }>(
+      '/admin/overview',
+    )
+    const totalPendingReports = res.data?.stats?.pendingReports || 0
+    stats.totalPendingReports = totalPendingReports
     stats.pendingReports = getNewPendingReports(totalPendingReports)
 
     try {
       const messageRes: any = await getUnreadCount()
       stats.unreadMessageCount = messageRes.data || 0
-    } catch (error) {
-      console.warn('获取未读消息数失败', error)
+    } catch {
       stats.unreadMessageCount = 0
     }
 
     try {
       const reqRes = await getAllRequests()
-      const requests = reqRes.data || []
-      stats.pendingFriendRequestCount = pendingIncomingFriendRequestsNotAcknowledged(requests, 'admin')
-    } catch (error) {
-      console.warn('获取好友申请失败', error)
+      stats.pendingFriendRequestCount = pendingIncomingFriendRequestsNotAcknowledged(
+        reqRes.data || [],
+        'admin',
+      )
+    } catch {
       stats.pendingFriendRequestCount = 0
     }
   } catch (error) {
@@ -81,81 +73,6 @@ async function loadDashboard() {
   } finally {
     loading.value = false
   }
-}
-
-const menuCards = computed(() => [
-  {
-    title: '个人中心',
-    desc: '查看个人信息',
-    icon: User,
-    path: '/admin/profile',
-    color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  },
-  {
-    title: '学生管理',
-    desc: '管理学生账号',
-    icon: School,
-    path: '/admin/students',
-    color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  },
-  {
-    title: '资料管理',
-    desc: '管理所有资料',
-    icon: Document,
-    path: '/admin/resources',
-    color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  },
-  {
-    title: '分类管理',
-    desc: '管理资料分类',
-    icon: Folder,
-    path: '/admin/categories',
-    color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  },
-  {
-    title: '举报管理',
-    desc: '处理用户举报',
-    icon: ChatDotRound,
-    path: '/admin/reports',
-    color: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
-    badge: stats.pendingReports > 0 ? stats.pendingReports : 0,
-  },
-  {
-    title: '系统公告',
-    desc: '发布和管理公告',
-    icon: Bell,
-    path: '/admin/announcements',
-    color: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-  },
-  {
-    title: '好友列表',
-    desc: '管理我的好友',
-    icon: UserFilled,
-    path: '/admin/friends',
-    color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
-  },
-  {
-    title: '消息',
-    desc: '查看好友消息',
-    icon: Message,
-    path: '/admin/messages',
-    color: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-    badge:
-      stats.unreadMessageCount + stats.pendingFriendRequestCount > 0
-        ? stats.unreadMessageCount + stats.pendingFriendRequestCount
-        : 0,
-  },
-  {
-    title: '设置',
-    desc: '系统设置',
-    icon: Setting,
-    path: '/admin/settings',
-    color: 'linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)',
-  },
-])
-
-function handleCardClick(path: string) {
-  router.push(path)
 }
 
 useDashboardPolling(loadDashboard)
@@ -168,240 +85,209 @@ watch(
     }
   },
 )
+
+const messageTotal = computed(
+  () => stats.unreadMessageCount + stats.pendingFriendRequestCount,
+)
+
+const todos = computed(() => {
+  const items: Array<{
+    key: string
+    label: string
+    desc: string
+    count: number
+    path: string
+    icon: typeof FlagOutline
+    primary?: boolean
+  }> = []
+  if (stats.pendingReports > 0 || stats.totalPendingReports > 0) {
+    items.push({
+      key: 'reports',
+      label: '举报待处理',
+      desc:
+        stats.pendingReports > 0
+          ? `新增 ${stats.pendingReports} 条，总量 ${stats.totalPendingReports}`
+          : `当前共 ${stats.totalPendingReports} 条待审`,
+      count: stats.pendingReports || stats.totalPendingReports,
+      path: '/admin/reports',
+      icon: FlagOutline,
+      primary: true,
+    })
+  }
+  if (messageTotal.value > 0) {
+    items.push({
+      key: 'messages',
+      label: '消息与申请',
+      desc: '未读私信或好友申请',
+      count: messageTotal.value,
+      path: '/admin/messages',
+      icon: ChatbubblesOutline,
+    })
+  }
+  return items
+})
 </script>
 
 <template>
-  <div class="dashboard-container">
-    <div class="menu-grid">
-      <div
-        v-for="(card, index) in menuCards"
-        :key="card.path"
-        class="menu-card"
-        :style="{ '--delay': index * 0.05 + 's' }"
-        @click="handleCardClick(card.path)"
-      >
-        <div class="card-icon" :style="{ background: card.color }">
-          <el-icon :size="32">
-            <component :is="card.icon" />
-          </el-icon>
+  <div class="dash">
+    <NSpin :show="loading">
+      <div class="hero glass-panel-strong">
+        <div>
+          <p class="section-label">Overview</p>
+          <h2 class="page-title">工作台</h2>
+          <p class="page-sub">
+            这里只汇总待办。资料、学生、公告等请从左侧侧栏进入，避免入口重复。
+          </p>
         </div>
-        <div class="card-content">
-          <h3 class="card-title">{{ card.title }}</h3>
-          <p class="card-desc">{{ card.desc }}</p>
-          <div v-if="card.badge !== undefined && card.badge > 0" class="card-badge">
-            {{ card.badge }}
-          </div>
-        </div>
-        <div class="card-arrow">→</div>
+        <NButton
+          v-if="stats.pendingReports > 0 || stats.totalPendingReports > 0"
+          type="primary"
+          @click="router.push('/admin/reports')"
+        >
+          去处理举报
+        </NButton>
       </div>
-    </div>
+
+      <div v-if="todos.length" class="inbox glass-panel">
+        <div class="inbox-head">
+          <h3>今日待办</h3>
+          <p class="muted">有数字才出现，处理完会自动收起。</p>
+        </div>
+        <div class="todo-list">
+          <button
+            v-for="item in todos"
+            :key="item.key"
+            type="button"
+            class="todo surface-card"
+            :class="{ primary: item.primary }"
+            @click="router.push(item.path)"
+          >
+            <div class="todo-icon">
+              <NIcon :size="20" :component="item.icon" />
+            </div>
+            <div class="todo-copy">
+              <div class="todo-title">
+                {{ item.label }}
+                <span class="count">{{ item.count }}</span>
+              </div>
+              <div class="todo-desc">{{ item.desc }}</div>
+            </div>
+            <NIcon :size="18" :component="ChevronForwardOutline" class="chevron" />
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="empty-inbox glass-panel">
+        <p class="muted">暂无待办。侧栏可管理资料、学生与系统公告。</p>
+      </div>
+    </NSpin>
   </div>
 </template>
 
 <style scoped>
-.dashboard-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  width: 100%;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
-  box-sizing: border-box;
-}
-
-.menu-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(clamp(240px, 25vw, 320px), 1fr));
-  gap: clamp(16px, 3vw, 24px);
-  animation: fadeIn 0.8s ease;
-}
-
-.menu-card {
-  background: #ffffff;
-  border-radius: clamp(16px, 2.5vw, 20px);
-  padding: clamp(20px, 3.5vw, 28px);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  position: relative;
-  overflow: hidden;
+.dash {
   display: flex;
   flex-direction: column;
-  gap: clamp(12px, 2vw, 16px);
-  animation: slideUp 0.5s ease var(--delay, 0s) both;
-  min-width: 0;
+  gap: 18px;
 }
 
-.menu-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: var(--card-color, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.3s ease;
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-end;
+  padding: 28px;
+  flex-wrap: wrap;
 }
 
-.menu-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
-  border-color: rgba(0, 0, 0, 0.1);
+.inbox,
+.empty-inbox {
+  padding: 22px 24px;
 }
 
-.menu-card:hover::before {
-  transform: scaleX(1);
+.inbox-head {
+  margin-bottom: 14px;
 }
 
-.card-icon {
-  width: clamp(48px, 8vw, 64px);
-  height: clamp(48px, 8vw, 64px);
-  border-radius: clamp(12px, 2vw, 16px);
+.inbox-head h3 {
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+
+.todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.todo {
+  border: none;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.15s ease, border-color 0.2s ease;
+}
+
+.todo:hover {
+  transform: translateY(-1px);
+  border-color: rgba(122, 158, 142, 0.35);
+}
+
+.todo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
   color: #fff;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  transition: transform 0.3s ease;
+  background: linear-gradient(145deg, #8ba3a8, #6f858a);
   flex-shrink: 0;
 }
 
-.card-icon .el-icon {
-  font-size: clamp(24px, 4vw, 32px);
+.todo.primary .todo-icon {
+  background: linear-gradient(145deg, #c4897e, #a86f66);
 }
 
-.menu-card:hover .card-icon {
-  transform: scale(1.1) rotate(5deg);
-}
-
-.card-content {
+.todo-copy {
   flex: 1;
-  position: relative;
+  min-width: 0;
 }
 
-.card-title {
-  font-size: clamp(16px, 2.5vw, 20px);
+.todo-title {
   font-weight: 600;
-  color: #1a1a1a;
-  margin: 0 0 clamp(6px, 1vw, 8px) 0;
-  letter-spacing: -0.3px;
-  word-break: break-word;
-}
-
-.card-desc {
-  font-size: clamp(12px, 1.75vw, 14px);
-  color: #666;
-  margin: 0;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.card-badge {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  background: #f56c6c;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: 10px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(245, 108, 108, 0.4);
-  z-index: 1;
+  gap: 8px;
 }
 
-.card-arrow {
-  position: absolute;
-  bottom: 28px;
-  right: 28px;
-  font-size: 20px;
-  color: #999;
-  transition: all 0.3s ease;
-  opacity: 0;
+.count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(122, 158, 142, 0.18);
+  color: var(--m-sage-deep);
+  font-size: 12px;
+  display: inline-grid;
+  place-items: center;
 }
 
-.menu-card:hover .card-arrow {
-  opacity: 1;
-  transform: translateX(4px);
-  color: #667eea;
+.todo-desc {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--m-ink-soft);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.chevron {
+  color: var(--m-ink-muted);
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (max-width: 480px) {
-  .menu-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  
-  .menu-card {
-    padding: 16px;
-  }
-  
-  .card-icon {
-    width: 48px;
-    height: 48px;
-  }
-}
-
-@media (min-width: 481px) and (max-width: 768px) {
-  .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 16px;
-  }
-  
-  .menu-card {
-    padding: 20px;
-  }
-  
-  .card-icon {
-    width: 56px;
-    height: 56px;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1024px) {
-  .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 20px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .menu-grid {
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 32px;
-  }
-  
-  .menu-card {
-    padding: 32px;
-  }
+.empty-inbox {
+  text-align: center;
 }
 </style>
-
-

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Bell } from '@element-plus/icons-vue'
+import { NTag, NEmpty, NSpin, NModal, NIcon } from 'naive-ui'
+import { MegaphoneOutline } from '@vicons/ionicons5'
 import request from '../../api/request'
 import { acknowledgeStudentAnnouncements } from '../../utils/studentAnnouncementReminder'
+import { message } from '../../utils/feedback'
+import PageHeader from '../../components/PageHeader.vue'
 
 interface Announcement {
   id: number
@@ -31,7 +33,7 @@ async function load() {
     })
     acknowledgeStudentAnnouncements(list.value.length)
   } catch {
-    ElMessage.error('加载公告列表失败')
+    message.error('加载公告列表失败')
   } finally {
     loading.value = false
   }
@@ -50,213 +52,154 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="student-announcements-page">
-    <el-card class="announcements-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <h3>系统公告</h3>
-            <p class="card-subtitle">查看平台最新公告信息</p>
-          </div>
-        </div>
-      </template>
+  <div class="page">
+    <PageHeader title="系统公告" subtitle="查看平台最新公告信息" :show-back="false" />
 
-      <div v-loading="loading">
-        <div v-if="list.length === 0" class="empty-announcements">
-          <el-empty description="暂无公告" />
-        </div>
-        <div v-else class="announcements-list">
-          <div
+    <div class="glass-panel list-panel">
+      <NSpin :show="loading">
+        <NEmpty v-if="list.length === 0" description="暂无公告" />
+        <div v-else class="list">
+          <button
             v-for="item in list"
             :key="item.id"
-            class="announcement-item"
+            type="button"
+            class="item surface-card"
             @click="viewDetail(item)"
           >
-            <div class="announcement-icon-wrapper">
-              <el-icon class="announcement-icon"><Bell /></el-icon>
+            <div class="icon">
+              <NIcon :size="22" :component="MegaphoneOutline" />
             </div>
-            <div class="announcement-info">
-              <div class="announcement-title">
+            <div class="info">
+              <div class="title">
                 {{ item.title }}
-                <el-tag v-if="item.pinned" type="warning" size="small" style="margin-left: 8px">置顶</el-tag>
+                <NTag v-if="item.pinned" type="warning" size="small" :bordered="false">置顶</NTag>
               </div>
-              <div class="announcement-meta">
-                <span>简介：{{ item.summary || '-' }}</span>
-              </div>
+              <div class="muted summary">简介：{{ item.summary || '-' }}</div>
             </div>
-            <div class="announcement-right">
-              <div class="announcement-time">{{ formatDate(item.publishAt) }}</div>
-            </div>
-          </div>
+            <div class="muted time">{{ formatDate(item.publishAt) }}</div>
+          </button>
         </div>
-      </div>
-    </el-card>
+      </NSpin>
+    </div>
 
-    <el-dialog v-model="detailDialogVisible" title="公告详情" width="800px">
-      <div v-if="selectedAnnouncement" class="announcement-detail">
+    <NModal
+      v-model:show="detailDialogVisible"
+      preset="card"
+      title="公告详情"
+      style="width: min(800px, 94vw)"
+      :bordered="false"
+    >
+      <div v-if="selectedAnnouncement" class="detail">
         <div class="detail-header">
           <h2>{{ selectedAnnouncement.title }}</h2>
           <div class="detail-meta">
-            <el-tag v-if="selectedAnnouncement.pinned" type="warning" size="small">置顶</el-tag>
-            <span class="detail-date">{{ formatDate(selectedAnnouncement.publishAt) }}</span>
+            <NTag v-if="selectedAnnouncement.pinned" type="warning" size="small" :bordered="false">
+              置顶
+            </NTag>
+            <span class="muted">{{ formatDate(selectedAnnouncement.publishAt) }}</span>
           </div>
         </div>
         <div class="detail-content" v-html="selectedAnnouncement.content"></div>
       </div>
-    </el-dialog>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.student-announcements-page {
-  max-width: 1400px;
+.page {
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
+  width: 100%;
+  padding: clamp(12px, 2vw, 24px);
   box-sizing: border-box;
 }
 
-.announcements-card {
-  margin-bottom: 24px;
+.list-panel {
+  padding: 14px;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header-left h3 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #1f2937;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.empty-announcements {
-  padding: 40px;
-  text-align: center;
-}
-
-.announcements-list {
+.list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
-.announcement-item {
+.item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 14px 16px;
+  width: 100%;
+  text-align: left;
   cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
-.announcement-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
+.item:hover {
+  border-color: rgba(122, 158, 142, 0.35);
+  transform: translateY(-1px);
 }
 
-.announcement-icon-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(122, 158, 142, 0.16);
+  color: var(--m-sage-deep);
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(161, 196, 253, 0.25);
 }
 
-.announcement-icon {
-  font-size: 24px;
-  color: #ffffff;
-}
-
-.announcement-info {
+.info {
   flex: 1;
   min-width: 0;
-  cursor: pointer;
 }
 
-.announcement-title {
-  font-size: 16px;
+.title {
+  font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
   margin-bottom: 4px;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
-}
-
-.announcement-meta {
-  font-size: 13px;
-  color: #6b7280;
-  display: flex;
-  gap: 16px;
   flex-wrap: wrap;
 }
 
-.announcement-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.summary {
+  font-size: 13px;
+}
+
+.time {
+  font-size: 12px;
+  white-space: nowrap;
   flex-shrink: 0;
 }
 
-.announcement-time {
-  font-size: 13px;
-  color: #9ca3af;
-  white-space: nowrap;
-  min-width: 160px;
-  text-align: right;
-}
-
-.announcement-detail {
-  padding: 20px 0;
-}
-
 .detail-header {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--m-stroke);
 }
 
 .detail-header h2 {
-  font-size: clamp(20px, 3vw, 24px);
-  font-weight: 700;
-  color: #1f2937;
-  margin: 0 0 12px 0;
-  line-height: 1.3;
+  margin: 0 0 10px;
+  font-size: clamp(18px, 2.5vw, 22px);
+  font-weight: 600;
 }
 
 .detail-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-}
-
-.detail-date {
-  font-size: 14px;
-  color: #6b7280;
 }
 
 .detail-content {
   line-height: 1.8;
-  color: #374151;
+  color: var(--m-ink);
   font-size: 15px;
 }
 
@@ -267,16 +210,15 @@ onMounted(load)
 .detail-content :deep(img) {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: 12px;
   margin: 16px 0;
 }
 
 .detail-content :deep(h1),
 .detail-content :deep(h2),
 .detail-content :deep(h3) {
-  margin-top: 24px;
-  margin-bottom: 12px;
-  color: #1f2937;
+  margin-top: 20px;
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
@@ -286,29 +228,14 @@ onMounted(load)
   padding-left: 24px;
 }
 
-.detail-content :deep(li) {
-  margin: 6px 0;
-}
-
-@media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .announcement-item {
+@media (max-width: 640px) {
+  .item {
     flex-wrap: wrap;
   }
 
-  .announcement-right {
+  .time {
     width: 100%;
-    justify-content: space-between;
-    margin-top: 8px;
-  }
-
-  .announcement-time {
-    min-width: auto;
-    text-align: left;
+    padding-left: 58px;
   }
 }
 </style>

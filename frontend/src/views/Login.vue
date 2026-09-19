@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+import { NButton, NForm, NFormItem, NInput, NIcon } from 'naive-ui'
+import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { message } from '../utils/feedback'
 import { login } from '../api/auth'
 import { useUserStore } from '../stores/user'
 
@@ -17,7 +18,7 @@ const form = reactive({
 
 async function handleSubmit() {
   if (!form.username || !form.password) {
-    ElMessage.warning('请输入用户名和密码')
+    message.warning('请输入用户名和密码')
     return
   }
   loading.value = true
@@ -30,20 +31,13 @@ async function handleSubmit() {
       role: res.data.role,
       avatar: res.data.avatar,
     })
-    ElMessage.success('登录成功')
+    message.success('登录成功')
     let redirect = route.query.redirect as string
     if (!redirect) {
-      if (res.data.role === 'ADMIN') {
-        redirect = '/admin'
-      } else if (res.data.role === 'STUDENT') {
-        redirect = '/student'
-      } else {
-        redirect = '/student'
-      }
+      redirect = res.data.role === 'ADMIN' ? '/admin' : '/student'
     }
     setTimeout(() => {
-      router.push(redirect).catch((err) => {
-        console.error('路由跳转失败:', err)
+      router.push(redirect).catch(() => {
         window.location.href = redirect
       })
     }, 50)
@@ -54,65 +48,149 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <div class="auth-wrapper">
-    <el-card class="auth-card">
-      <h2 class="title">校园资料分享平台</h2>
-      <p class="subtitle">请输入账号密码登录</p>
-      <el-form label-width="0" class="auth-form" @keyup.enter="handleSubmit">
-        <el-form-item>
-          <el-input v-model="form.username" placeholder="请输入用户名" size="large" :prefix-icon="User" />
-        </el-form-item>
-        <el-form-item>
-          <el-input v-model="form.password" placeholder="请输入密码" size="large" :prefix-icon="Lock" show-password />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" size="large" round :loading="loading" @click="handleSubmit" style="width: 100%">
-            登录
-          </el-button>
-        </el-form-item>
-      </el-form>
-      <div class="extra">
-        还没有账号？
-        <el-link type="primary" @click="router.push('/register')">立即注册</el-link>
+  <div class="auth-page">
+    <div class="app-wash" aria-hidden="true" />
+    <div class="auth-stage">
+      <div class="hero-copy">
+        <div class="brand-mark">CS</div>
+        <h1>Campus Share</h1>
+        <p>校园资料分享平台 · 温和、清晰、好找</p>
       </div>
-    </el-card>
+      <div class="auth-card glass-panel-strong">
+        <h2>登录</h2>
+        <p class="hint">使用账号密码进入工作台</p>
+        <NForm class="form" @keyup.enter="handleSubmit">
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput v-model:value="form.username" size="large" placeholder="用户名" round>
+              <template #prefix>
+                <NIcon :component="PersonOutline" />
+              </template>
+            </NInput>
+          </NFormItem>
+          <NFormItem :show-label="false" :show-feedback="false">
+            <NInput
+              v-model:value="form.password"
+              type="password"
+              show-password-on="click"
+              size="large"
+              placeholder="密码"
+              round
+            >
+              <template #prefix>
+                <NIcon :component="LockClosedOutline" />
+              </template>
+            </NInput>
+          </NFormItem>
+          <NButton type="primary" size="large" block :loading="loading" @click="handleSubmit">
+            登录
+          </NButton>
+        </NForm>
+        <div class="extra">
+          还没有账号？
+          <button type="button" class="link" @click="router.push('/register')">立即注册</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.auth-wrapper {
-  min-height: 100vh;
-  background: radial-gradient(circle at top, #eef2ff, #f5f7fb);
-  display: flex;
-  flex-direction: column;
+.auth-page {
+  position: relative;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-stage {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 28px;
   align-items: center;
-  justify-content: center;
-  padding: 32px 16px;
+}
+
+.hero-copy h1 {
+  margin: 16px 0 8px;
+  font-size: clamp(36px, 5vw, 52px);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+
+.hero-copy p {
+  margin: 0;
+  color: var(--m-ink-soft);
+  font-size: 16px;
+}
+
+.brand-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(145deg, var(--m-sage), var(--m-sage-deep));
+  box-shadow: 0 16px 32px rgba(92, 128, 112, 0.28);
 }
 
 .auth-card {
-  width: min(420px, 100%);
-  text-align: center;
+  padding: 36px 32px;
 }
 
-.title {
-  margin-bottom: 4px;
-  font-size: 24px;
-  font-weight: 600;
-}
-
-.subtitle {
+.auth-card h2 {
   margin: 0;
-  color: #6b7280;
+  font-size: 28px;
+  letter-spacing: -0.03em;
 }
 
-.auth-form {
-  margin-top: 24px;
+.hint {
+  margin: 6px 0 24px;
+  color: var(--m-ink-soft);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .extra {
-  margin-top: 12px;
-  text-align: right;
-  color: #6b7280;
+  margin-top: 22px;
+  text-align: center;
+  color: var(--m-ink-soft);
+  font-size: 14px;
+}
+
+.link {
+  border: none;
+  background: none;
+  color: var(--m-sage-deep);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+@media (max-width: 768px) {
+  .auth-stage {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .hero-copy {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .auth-card {
+    padding: 28px 22px;
+  }
 }
 </style>

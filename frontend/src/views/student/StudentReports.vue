@@ -1,9 +1,24 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, ChatDotRound, Edit, Delete } from '@element-plus/icons-vue'
+import {
+  NTabs,
+  NTabPane,
+  NTag,
+  NEmpty,
+  NSpin,
+  NButton,
+  NIcon,
+  NModal,
+  NForm,
+  NFormItem,
+  NInput,
+  NSpace,
+} from 'naive-ui'
+import { DocumentOutline, ChatbubbleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5'
 import request from '../../api/request'
 import { getMyUserReports, type UserReport } from '../../api/userReport'
+import { message, dialog } from '../../utils/feedback'
+import PageHeader from '../../components/PageHeader.vue'
 
 interface Report {
   id: number
@@ -29,11 +44,11 @@ const editDialogVisible = ref(false)
 const editReport = ref<Report | null>(null)
 const editReason = ref('')
 
-const statusMap: Record<string, { label: string; type: string }> = {
+const statusMap: Record<string, { label: string; type: 'warning' | 'success' | 'info' | 'default' }> = {
   PENDING: { label: '待处理', type: 'warning' },
   RESOLVED: { label: '已处理', type: 'success' },
   REJECTED: { label: '已驳回', type: 'info' },
-  CANCELLED: { label: '已撤销', type: '' },
+  CANCELLED: { label: '已撤销', type: 'default' },
 }
 
 async function loadResourceReports() {
@@ -42,7 +57,7 @@ async function loadResourceReports() {
     const res: any = await request.get('/reports/my')
     list.value = res.data || []
   } catch {
-    ElMessage.error('加载资料举报列表失败')
+    message.error('加载资料举报列表失败')
   } finally {
     loading.value = false
   }
@@ -54,14 +69,14 @@ async function loadUserReports() {
     const res: any = await getMyUserReports()
     userReportList.value = res.data || []
   } catch {
-    ElMessage.error('加载用户举报列表失败')
+    message.error('加载用户举报列表失败')
   } finally {
     userReportLoading.value = false
   }
 }
 
-function handleTabChange(tab: string) {
-  activeTab.value = tab
+function handleTabChange(tab: string | number) {
+  activeTab.value = String(tab)
   if (tab === 'resource') {
     if (list.value.length === 0) {
       loadResourceReports()
@@ -73,30 +88,31 @@ function handleTabChange(tab: string) {
   }
 }
 
-async function handleCancel(row: Report) {
-  try {
-    await ElMessageBox.confirm('确定要撤销此举报吗？撤销后将无法再次修改。', '确认撤销', {
-      type: 'warning',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-    })
-    await request.put(`/reports/cancel?reportId=${row.id}`)
-    ElMessage.success('撤销成功')
-    loadResourceReports()
-  } catch (error: any) {
-    if (error !== 'cancel') {
-      ElMessage.error(error?.response?.data?.message || '撤销失败')
-    }
-  }
+function handleCancel(row: Report) {
+  dialog.warning({
+    title: '确认撤销',
+    content: '确定要撤销此举报吗？撤销后将无法再次修改。',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await request.put(`/reports/cancel?reportId=${row.id}`)
+        message.success('撤销成功')
+        loadResourceReports()
+      } catch (error: any) {
+        message.error(error?.response?.data?.message || '撤销失败')
+      }
+    },
+  })
 }
 
 function handleEdit(row: Report) {
   if (row.status !== 'PENDING') {
-    ElMessage.warning('只能修改待处理的举报')
+    message.warning('只能修改待处理的举报')
     return
   }
   if (row.cancelled) {
-    ElMessage.warning('已撤销的举报不能修改')
+    message.warning('已撤销的举报不能修改')
     return
   }
   editReport.value = row
@@ -123,7 +139,7 @@ const sortedUserReports = computed(() => {
 async function handleUpdate() {
   if (!editReport.value) return
   if (!editReason.value.trim()) {
-    ElMessage.warning('请输入举报原因')
+    message.warning('请输入举报原因')
     return
   }
   try {
@@ -131,11 +147,11 @@ async function handleUpdate() {
       reportId: editReport.value.id,
       reason: editReason.value,
     })
-    ElMessage.success('修改成功')
+    message.success('修改成功')
     editDialogVisible.value = false
     loadResourceReports()
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.message || '修改失败')
+    message.error(error?.response?.data?.message || '修改失败')
   }
 }
 
@@ -150,301 +166,226 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="student-reports-page">
-    <el-card class="reports-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <h3>我的举报</h3>
-            <p class="card-subtitle">查看我提交的所有举报记录</p>
-          </div>
-        </div>
-      </template>
+  <div class="page">
+    <PageHeader title="我的举报" subtitle="查看我提交的所有举报记录" :show-back="false" />
 
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-        <el-tab-pane label="资料举报" name="resource">
-          <div v-loading="loading">
-            <div v-if="list.length === 0" class="empty-reports">
-              <el-empty description="暂无资料举报" />
-            </div>
-            <div v-else class="reports-list">
-              <div v-for="report in sortedResourceReports" :key="report.id" class="report-item">
-                <div class="report-icon-wrapper">
-                  <el-icon class="report-icon"><Document /></el-icon>
+    <div class="glass-panel panel">
+      <NTabs v-model:value="activeTab" type="segment" @update:value="handleTabChange">
+        <NTabPane name="resource" tab="资料举报">
+          <NSpin :show="loading">
+            <NEmpty v-if="list.length === 0" description="暂无资料举报" />
+            <div v-else class="list">
+              <div v-for="report in sortedResourceReports" :key="report.id" class="item surface-card">
+                <div class="icon">
+                  <NIcon :size="22" :component="DocumentOutline" />
                 </div>
-                <div class="report-info">
-                  <div class="report-title">
+                <div class="info">
+                  <div class="title">
                     {{ report.resourceTitle || '（无标题/已删除）' }}
-                    <el-tag :type="statusMap[report.status]?.type" size="small" style="margin-left: 8px">
+                    <NTag
+                      :type="statusMap[report.status]?.type || 'default'"
+                      size="small"
+                      :bordered="false"
+                    >
                       {{ statusMap[report.status]?.label || report.status }}
-                    </el-tag>
-                    <el-tag v-if="report.cancelled" type="info" size="small" style="margin-left: 8px">已撤销</el-tag>
-                    <el-tag v-if="report.resourceVisibility === 'HIDDEN'" type="warning" size="small" style="margin-left: 8px">已隐藏</el-tag>
+                    </NTag>
+                    <NTag v-if="report.cancelled" size="small" :bordered="false">已撤销</NTag>
+                    <NTag
+                      v-if="report.resourceVisibility === 'HIDDEN'"
+                      type="warning"
+                      size="small"
+                      :bordered="false"
+                    >
+                      已隐藏
+                    </NTag>
                   </div>
-                  <div class="report-meta">
+                  <div class="meta muted">
                     <span>资料ID：{{ report.resourceId }}</span>
                     <span>举报原因：{{ report.reason }}</span>
                     <span v-if="report.reviewReply">管理员回复：{{ report.reviewReply }}</span>
                   </div>
                 </div>
-                <div class="report-right">
-                  <div class="report-actions">
-                    <el-button
-                      v-if="report.status === 'PENDING' && !report.cancelled"
-                      size="small"
-                      text
-                      type="info"
-                      :icon="Edit"
-                      @click.stop="handleEdit(report)"
-                    >
+                <div class="right">
+                  <NSpace v-if="report.status === 'PENDING' && !report.cancelled" size="small">
+                    <NButton size="tiny" quaternary @click="handleEdit(report)">
+                      <template #icon><NIcon :component="CreateOutline" /></template>
                       修改
-                    </el-button>
-                    <el-button
-                      v-if="report.status === 'PENDING' && !report.cancelled"
-                      size="small"
-                      text
-                      type="danger"
-                      :icon="Delete"
-                      @click.stop="handleCancel(report)"
-                    >
+                    </NButton>
+                    <NButton size="tiny" quaternary type="error" @click="handleCancel(report)">
+                      <template #icon><NIcon :component="TrashOutline" /></template>
                       撤销
-                    </el-button>
-                  </div>
-                  <div class="report-time">
+                    </NButton>
+                  </NSpace>
+                  <div class="time muted">
                     <div>创建：{{ formatDate(report.createdAt) }}</div>
                     <div v-if="report.reviewedAt">处理：{{ formatDate(report.reviewedAt) }}</div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </el-tab-pane>
-        <el-tab-pane label="用户举报" name="user">
-          <div v-loading="userReportLoading">
-            <div v-if="userReportList.length === 0" class="empty-reports">
-              <el-empty description="暂无用户举报" />
-            </div>
-            <div v-else class="reports-list">
-              <div v-for="report in sortedUserReports" :key="report.id" class="report-item">
-                <div class="report-icon-wrapper user-report-icon">
-                  <el-icon class="report-icon"><ChatDotRound /></el-icon>
+          </NSpin>
+        </NTabPane>
+
+        <NTabPane name="user" tab="用户举报">
+          <NSpin :show="userReportLoading">
+            <NEmpty v-if="userReportList.length === 0" description="暂无用户举报" />
+            <div v-else class="list">
+              <div v-for="report in sortedUserReports" :key="report.id" class="item surface-card">
+                <div class="icon user">
+                  <NIcon :size="22" :component="ChatbubbleOutline" />
                 </div>
-                <div class="report-info">
-                  <div class="report-title">
+                <div class="info">
+                  <div class="title">
                     被举报用户：{{ report.reportedUsername || `ID: ${report.reportedUserId}` }}
-                    <el-tag :type="statusMap[report.status]?.type" size="small" style="margin-left: 8px">
+                    <NTag
+                      :type="statusMap[report.status]?.type || 'default'"
+                      size="small"
+                      :bordered="false"
+                    >
                       {{ statusMap[report.status]?.label || report.status }}
-                    </el-tag>
-                    <el-tag v-if="report.cancelled" type="info" size="small" style="margin-left: 8px">已撤销</el-tag>
+                    </NTag>
+                    <NTag v-if="report.cancelled" size="small" :bordered="false">已撤销</NTag>
                   </div>
-                  <div class="report-meta">
+                  <div class="meta muted">
                     <span>举报原因：{{ report.reason }}</span>
                     <span v-if="report.reviewReply">管理员回复：{{ report.reviewReply }}</span>
                   </div>
                 </div>
-                <div class="report-right">
-                  <div class="report-time">
+                <div class="right">
+                  <div class="time muted">
                     <div>创建：{{ formatDate(report.createdAt) }}</div>
                     <div v-if="report.reviewedAt">处理：{{ formatDate(report.reviewedAt) }}</div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
-        </el-tab-pane>
-      </el-tabs>
-    </el-card>
+          </NSpin>
+        </NTabPane>
+      </NTabs>
+    </div>
 
-    <el-dialog v-model="editDialogVisible" title="修改举报原因" width="500px">
-      <el-form>
-        <el-form-item label="举报原因">
-          <el-input
-            v-model="editReason"
+    <NModal
+      v-model:show="editDialogVisible"
+      preset="card"
+      title="修改举报原因"
+      style="width: min(500px, 92vw)"
+      :bordered="false"
+    >
+      <NForm label-placement="top">
+        <NFormItem label="举报原因">
+          <NInput
+            v-model:value="editReason"
             type="textarea"
             :rows="4"
             placeholder="请输入举报原因"
             maxlength="500"
-            show-word-limit
+            show-count
           />
-        </el-form-item>
-      </el-form>
+        </NFormItem>
+      </NForm>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleUpdate">确定</el-button>
+        <NSpace justify="end">
+          <NButton @click="editDialogVisible = false">取消</NButton>
+          <NButton type="primary" @click="handleUpdate">确定</NButton>
+        </NSpace>
       </template>
-    </el-dialog>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.student-reports-page {
-  max-width: 1400px;
+.page {
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
+  width: 100%;
+  padding: clamp(12px, 2vw, 24px);
   box-sizing: border-box;
 }
 
-.reports-card {
-  margin-bottom: 24px;
+.panel {
+  padding: 18px 20px 20px;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header-left h3 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #1f2937;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.empty-reports {
-  padding: 40px;
-  text-align: center;
-}
-
-.reports-list {
+.list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  padding-top: 8px;
 }
 
-.report-item {
+.item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 14px 16px;
 }
 
-.report-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
-}
-
-.report-icon-wrapper {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(122, 158, 142, 0.16);
+  color: var(--m-sage-deep);
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(48, 207, 208, 0.25);
 }
 
-.report-icon-wrapper.user-report-icon {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  box-shadow: 0 4px 12px rgba(240, 147, 251, 0.25);
+.icon.user {
+  background: rgba(196, 137, 126, 0.16);
+  color: var(--m-terracotta);
 }
 
-.report-icon {
-  font-size: 24px;
-  color: #ffffff;
-}
-
-.report-info {
+.info {
   flex: 1;
   min-width: 0;
 }
 
-.report-title {
-  font-size: 16px;
+.title {
+  font-size: 15px;
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.report-meta {
+.meta {
   font-size: 13px;
-  color: #6b7280;
   display: flex;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
 }
 
-.report-right {
+.right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
-.report-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.report-actions :deep(.el-button) {
-  height: 28px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.report-actions :deep(.el-button__icon) {
-  margin-right: 4px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.report-time {
-  font-size: 13px;
-  color: #9ca3af;
-  white-space: nowrap;
-  min-width: 160px;
+.time {
+  font-size: 12px;
   text-align: right;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  white-space: nowrap;
 }
 
-.muted {
-  color: #909399;
-}
-
-@media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .report-item {
+@media (max-width: 720px) {
+  .item {
     flex-wrap: wrap;
   }
 
-  .report-right {
+  .right {
     width: 100%;
     justify-content: space-between;
-    margin-top: 8px;
   }
 
-  .report-time {
-    min-width: auto;
+  .time {
     text-align: left;
   }
 }
 </style>
-

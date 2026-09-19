@@ -1,16 +1,40 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { User, ChatDotRound, UserFilled, Delete, Warning, Edit, View, Hide, Document } from '@element-plus/icons-vue'
+import {
+  NButton,
+  NIcon,
+  NTag,
+  NSpin,
+  NEmpty,
+  NModal,
+  NInput,
+  NSelect,
+  NInputNumber,
+  NForm,
+  NFormItem,
+  NSpace,
+} from 'naive-ui'
+import {
+  ChatbubbleOutline,
+  PersonAddOutline,
+  TrashOutline,
+  WarningOutline,
+  CreateOutline,
+  EyeOutline,
+  EyeOffOutline,
+  DocumentOutline,
+} from '@vicons/ionicons5'
 import { getUserProfile, sendFriendRequest, deleteFriend, blockFriend, type UserProfile } from '../api/friend'
 import { useUserStore } from '../stores/user'
 import type { Resource } from '../api/resource'
 import { createUserReport } from '../api/userReport'
 import { createUserPunishment } from '../api/punishment'
-import { getAvatarUrl } from '../utils/resource'
 import request from '../api/request'
 import { updateResourceVisibility } from '../api/resource'
+import { message, dialog } from '../utils/feedback'
+import PageHeader from '../components/PageHeader.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,10 +49,17 @@ const isAdmin = computed(() => userStore.user?.role === 'ADMIN')
 const reportDialogVisible = ref(false)
 const reportReason = ref('')
 const punishmentDialogVisible = ref(false)
-const punishmentType = ref<'WARNING' | 'MUTE' | ''>('')
+const punishmentType = ref<'WARNING' | 'MUTE' | null>(null)
 const punishmentDuration = ref<number | null>(null)
 const punishmentReason = ref('')
 const submitting = ref(false)
+const friendRequestVisible = ref(false)
+const friendRequestMessage = ref('')
+
+const punishmentOptions = [
+  { label: '警告', value: 'WARNING' },
+  { label: '禁言', value: 'MUTE' },
+]
 
 async function loadProfile() {
   loading.value = true
@@ -39,7 +70,7 @@ async function loadProfile() {
       await loadResources()
     }
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '加载失败')
+    message.error(e.response?.data?.message || '加载失败')
     router.back()
   } finally {
     loading.value = false
@@ -62,54 +93,61 @@ async function loadResources() {
   }
 }
 
-async function handleAddFriend() {
+function handleAddFriend() {
+  if (!profile.value) return
+  friendRequestMessage.value = ''
+  friendRequestVisible.value = true
+}
+
+async function confirmAddFriend() {
   if (!profile.value) return
   try {
-    const { value: message } = await ElMessageBox.prompt('请输入申请说明（可选）', '添加好友', {
-      confirmButtonText: '发送',
-      cancelButtonText: '取消',
-      inputType: 'textarea',
-      inputPlaceholder: '请输入申请说明...',
-    })
-    await sendFriendRequest(profile.value.id, message || '')
-    ElMessage.success('好友申请已发送')
+    await sendFriendRequest(profile.value.id, friendRequestMessage.value || '')
+    message.success('好友申请已发送')
+    friendRequestVisible.value = false
+    friendRequestMessage.value = ''
     await loadProfile()
   } catch (e: any) {
-    if (e === 'cancel') {
-    }
+    message.error(e.response?.data?.message || '发送失败')
   }
 }
 
-async function handleDeleteFriend() {
+function handleDeleteFriend() {
   if (!profile.value) return
-  try {
-    await ElMessageBox.confirm('确定要删除该好友吗？', '删除好友', {
-      type: 'warning',
-    })
-    await deleteFriend(profile.value.id)
-    ElMessage.success('已删除好友')
-    await loadProfile()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.message || '删除失败')
-    }
-  }
+  dialog.warning({
+    title: '删除好友',
+    content: '确定要删除该好友吗？',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteFriend(profile.value!.id)
+        message.success('已删除好友')
+        await loadProfile()
+      } catch (e: any) {
+        message.error(e.response?.data?.message || '删除失败')
+      }
+    },
+  })
 }
 
-async function handleBlockFriend() {
+function handleBlockFriend() {
   if (!profile.value) return
-  try {
-    await ElMessageBox.confirm('确定要拉黑该用户吗？拉黑后将无法接收对方的消息。', '拉黑用户', {
-      type: 'warning',
-    })
-    await blockFriend(profile.value.id)
-    ElMessage.success('已拉黑')
-    await loadProfile()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.message || '操作失败')
-    }
-  }
+  dialog.warning({
+    title: '拉黑用户',
+    content: '确定要拉黑该用户吗？拉黑后将无法接收对方的消息。',
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await blockFriend(profile.value!.id)
+        message.success('已拉黑')
+        await loadProfile()
+      } catch (e: any) {
+        message.error(e.response?.data?.message || '操作失败')
+      }
+    },
+  })
 }
 
 function handleSendMessage() {
@@ -122,73 +160,74 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
-async function handleEditResource(resource: Resource) {
+function handleEditResource(resource: Resource) {
   const basePath = route.path.startsWith('/admin') ? '/admin' : '/student'
   router.push(`${basePath}/upload?id=${resource.id}`)
 }
 
-async function handleDeleteResource(resource: Resource) {
-  try {
-    await ElMessageBox.confirm(`确定要删除资料 "${resource.title}" 吗？`, '确认删除', {
-      type: 'warning',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-    })
-    await request.delete(`/resources/${resource.id}`)
-    ElMessage.success('删除成功')
-    await loadResources()
-    if (profile.value) {
-      profile.value.resourceCount = (profile.value.resourceCount || 0) - 1
-    }
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.message || '删除失败')
-    }
-  }
+function handleDeleteResource(resource: Resource) {
+  dialog.warning({
+    title: '确认删除',
+    content: `确定要删除资料 "${resource.title}" 吗？`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await request.delete(`/resources/${resource.id}`)
+        message.success('删除成功')
+        await loadResources()
+        if (profile.value) {
+          profile.value.resourceCount = (profile.value.resourceCount || 0) - 1
+        }
+      } catch (e: any) {
+        message.error(e.response?.data?.message || '删除失败')
+      }
+    },
+  })
 }
 
 async function handleToggleVisibility(resource: Resource) {
   const target = resource.visibility === 'HIDDEN' ? 'VISIBLE' : 'HIDDEN'
   try {
     await updateResourceVisibility(resource.id, target)
-    ElMessage.success(target === 'HIDDEN' ? '已隐藏该资料' : '已恢复可见')
+    message.success(target === 'HIDDEN' ? '已隐藏该资料' : '已恢复可见')
     await loadResources()
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '操作失败')
+    message.error(e.response?.data?.message || '操作失败')
   }
 }
 
-async function handleReport() {
+function handleReport() {
   if (!profile.value) return
   reportDialogVisible.value = true
 }
 
 async function confirmReport() {
   if (!profile.value || !reportReason.value.trim()) {
-    ElMessage.warning('请输入举报原因')
+    message.warning('请输入举报原因')
     return
   }
   try {
     await createUserReport(profile.value.id, reportReason.value.trim())
-    ElMessage.success('举报已提交')
+    message.success('举报已提交')
     reportDialogVisible.value = false
     reportReason.value = ''
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '举报失败')
+    message.error(e.response?.data?.message || '举报失败')
   }
 }
 
 function handlePunish() {
   if (!profile.value) return
   punishmentDialogVisible.value = true
-  punishmentType.value = ''
+  punishmentType.value = null
   punishmentDuration.value = null
   punishmentReason.value = ''
 }
 
 async function confirmPunish() {
   if (!profile.value || !punishmentType.value) {
-    ElMessage.warning('请选择处罚类型')
+    message.warning('请选择处罚类型')
     return
   }
   submitting.value = true
@@ -197,398 +236,410 @@ async function confirmPunish() {
       profile.value.id,
       punishmentType.value,
       punishmentDuration.value,
-      punishmentReason.value || '管理员直接处罚'
+      punishmentReason.value || '管理员直接处罚',
     )
-    ElMessage.success('处罚已创建')
+    message.success('处罚已创建')
     punishmentDialogVisible.value = false
-    punishmentType.value = ''
+    punishmentType.value = null
     punishmentDuration.value = null
     punishmentReason.value = ''
   } catch (e: any) {
-    ElMessage.error(e.response?.data?.message || '处罚失败')
+    message.error(e.response?.data?.message || '处罚失败')
   } finally {
     submitting.value = false
   }
+}
+
+function openResource(resource: Resource) {
+  router.push({
+    path: route.path.startsWith('/admin')
+      ? `/admin/resources/${resource.id}`
+      : `/student/resources/${resource.id}`,
+    query: { from: 'profile' },
+  })
 }
 
 onMounted(loadProfile)
 </script>
 
 <template>
-  <div class="user-home-page" v-loading="loading">
-    <el-card v-if="profile" class="profile-card">
-      <div class="profile-header">
-        <div class="avatar-section">
-          <el-avatar :size="120" :src="getAvatarUrl(profile.avatar)" class="user-avatar">
-            <el-icon :size="60"><User /></el-icon>
-          </el-avatar>
-        </div>
-        <div class="info-section">
-          <h1 class="user-name">{{ profile.nickname || profile.username }}</h1>
-          <div class="user-meta">
-            <span class="meta-item">用户名：{{ profile.username }}</span>
-            <span class="meta-item" v-if="profile.gender">性别：{{ profile.gender }}</span>
-            <span class="meta-item">注册时间：{{ formatDate(profile.createdAt) }}</span>
-          </div>
-          <div class="stats-section">
-            <div class="stat-item">
+  <div class="page">
+    <PageHeader title="用户主页" />
+
+    <NSpin :show="loading">
+      <template v-if="profile">
+        <div class="profile glass-panel-strong">
+          <UserAvatar
+            :src="profile.avatar"
+            :name="profile.nickname || profile.username"
+            :size="96"
+          />
+          <div class="profile-info">
+            <h2 class="name">{{ profile.nickname || profile.username }}</h2>
+            <div class="meta muted">
+              <span>用户名：{{ profile.username }}</span>
+              <span v-if="profile.gender">性别：{{ profile.gender }}</span>
+              <span>注册时间：{{ formatDate(profile.createdAt) }}</span>
+            </div>
+            <div class="stat-pill">
               <span class="stat-value">{{ profile.resourceCount || 0 }}</span>
-              <span class="stat-label">发布的资料</span>
+              <span class="muted">发布的资料</span>
             </div>
           </div>
-        </div>
-        <div class="action-section" v-if="userStore.token">
-          <template v-if="profile.friendStatus === 'SELF'">
-            <el-button type="primary" @click="router.push('/student/settings')">
-              <el-icon><UserFilled /></el-icon>
-              编辑资料
-            </el-button>
-          </template>
-          <template v-else-if="profile.friendStatus === 'NONE'">
-            <el-button type="primary" @click="handleAddFriend">
-              <el-icon><UserFilled /></el-icon>
-              添加好友
-            </el-button>
-          </template>
-          <template v-else-if="profile.friendStatus === 'PENDING'">
-            <el-button disabled>已发送申请</el-button>
-          </template>
-          <template v-else-if="profile.friendStatus === 'FRIEND'">
-            <el-button type="primary" @click="handleSendMessage">
-              <el-icon><ChatDotRound /></el-icon>
-              发送消息
-            </el-button>
-            <el-button @click="handleDeleteFriend">
-              <el-icon><Delete /></el-icon>
-              删除好友
-            </el-button>
-            <el-button type="danger" plain @click="handleBlockFriend">
-              <el-icon><Warning /></el-icon>
-              拉黑
-            </el-button>
-          </template>
-          <template v-if="!isAdmin && profile.friendStatus !== 'SELF'">
-            <el-button type="danger" plain @click="handleReport">
-              <el-icon><Warning /></el-icon>
+          <div v-if="userStore.token" class="actions">
+            <template v-if="profile.friendStatus === 'SELF'">
+              <NButton type="primary" @click="router.push('/student/settings')">
+                <template #icon><NIcon :component="PersonAddOutline" /></template>
+                编辑资料
+              </NButton>
+            </template>
+            <template v-else-if="profile.friendStatus === 'NONE'">
+              <NButton type="primary" @click="handleAddFriend">
+                <template #icon><NIcon :component="PersonAddOutline" /></template>
+                添加好友
+              </NButton>
+            </template>
+            <template v-else-if="profile.friendStatus === 'PENDING'">
+              <NButton disabled>已发送申请</NButton>
+            </template>
+            <template v-else-if="profile.friendStatus === 'FRIEND'">
+              <NButton type="primary" @click="handleSendMessage">
+                <template #icon><NIcon :component="ChatbubbleOutline" /></template>
+                发送消息
+              </NButton>
+              <NButton @click="handleDeleteFriend">
+                <template #icon><NIcon :component="TrashOutline" /></template>
+                删除好友
+              </NButton>
+              <NButton type="error" secondary @click="handleBlockFriend">
+                <template #icon><NIcon :component="WarningOutline" /></template>
+                拉黑
+              </NButton>
+            </template>
+            <NButton
+              v-if="!isAdmin && profile.friendStatus !== 'SELF'"
+              type="error"
+              secondary
+              @click="handleReport"
+            >
+              <template #icon><NIcon :component="WarningOutline" /></template>
               举报
-            </el-button>
-          </template>
-          <template v-if="isAdmin && profile.friendStatus !== 'SELF'">
-            <el-button type="danger" @click="handlePunish">
-              <el-icon><Warning /></el-icon>
+            </NButton>
+            <NButton
+              v-if="isAdmin && profile.friendStatus !== 'SELF'"
+              type="error"
+              @click="handlePunish"
+            >
+              <template #icon><NIcon :component="WarningOutline" /></template>
               处罚
-            </el-button>
-          </template>
-        </div>
-      </div>
-    </el-card>
-
-    <el-card class="resources-card" v-if="profile">
-      <template #header>
-        <span>发布的资料</span>
-      </template>
-      <div v-loading="resourcesLoading">
-        <div v-if="resources.length === 0" class="empty-resources">暂无发布的资料</div>
-        <div v-else class="resources-list">
-          <div v-for="resource in resources" :key="resource.id" class="resource-item">
-            <el-icon class="resource-icon"><Document /></el-icon>
-            <div class="resource-info" @click="router.push({ path: route.path.startsWith('/admin') ? `/admin/resources/${resource.id}` : `/student/resources/${resource.id}`, query: { from: 'profile' } })">
-              <div class="resource-title">
-                {{ resource.title }}
-                <el-tag v-if="resource.visibility === 'HIDDEN'" type="warning" size="small" style="margin-left: 8px">已隐藏</el-tag>
-              </div>
-              <div class="resource-meta">
-                <span>浏览 {{ resource.viewCount || 0 }}</span>
-                <span>下载 {{ resource.downloadCount || 0 }}</span>
-                <span>点赞 {{ resource.likeCount || 0 }}</span>
-              </div>
-            </div>
-            <div class="resource-right" v-if="isAdmin">
-              <div class="resource-actions">
-                <el-button
-                  size="small"
-                  text
-                  type="info"
-                  :icon="Edit"
-                  @click.stop="handleEditResource(resource)"
-                >
-                  修改
-                </el-button>
-                <el-button
-                  size="small"
-                  text
-                  type="warning"
-                  :icon="resource.visibility === 'HIDDEN' ? View : Hide"
-                  @click.stop="handleToggleVisibility(resource)"
-                >
-                  {{ resource.visibility === 'HIDDEN' ? '恢复可见' : '隐藏' }}
-                </el-button>
-                <el-button
-                  size="small"
-                  text
-                  type="danger"
-                  :icon="Delete"
-                  @click.stop="handleDeleteResource(resource)"
-                >
-                  删除
-                </el-button>
-              </div>
-              <div class="resource-time">{{ formatDate(resource.createdAt) }}</div>
-            </div>
+            </NButton>
           </div>
         </div>
-      </div>
-    </el-card>
 
-    <el-dialog v-model="reportDialogVisible" title="举报用户" width="500px">
-      <el-input
-        v-model="reportReason"
+        <div class="glass-panel resources-panel">
+          <h3 class="section-title">发布的资料</h3>
+          <NSpin :show="resourcesLoading">
+            <NEmpty v-if="resources.length === 0" description="暂无发布的资料" />
+            <div v-else class="resources">
+              <div
+                v-for="resource in resources"
+                :key="resource.id"
+                class="resource-item surface-card"
+              >
+                <div class="res-icon">
+                  <NIcon :size="22" :component="DocumentOutline" />
+                </div>
+                <div class="res-info" @click="openResource(resource)">
+                  <div class="res-title">
+                    {{ resource.title }}
+                    <NTag
+                      v-if="resource.visibility === 'HIDDEN'"
+                      type="warning"
+                      size="small"
+                      :bordered="false"
+                    >
+                      已隐藏
+                    </NTag>
+                  </div>
+                  <div class="res-meta muted">
+                    <span>浏览 {{ resource.viewCount || 0 }}</span>
+                    <span>下载 {{ resource.downloadCount || 0 }}</span>
+                    <span>点赞 {{ resource.likeCount || 0 }}</span>
+                  </div>
+                </div>
+                <div v-if="isAdmin" class="res-admin">
+                  <NSpace size="small">
+                    <NButton size="tiny" quaternary @click.stop="handleEditResource(resource)">
+                      <template #icon><NIcon :component="CreateOutline" /></template>
+                      修改
+                    </NButton>
+                    <NButton size="tiny" quaternary type="warning" @click.stop="handleToggleVisibility(resource)">
+                      <template #icon>
+                        <NIcon :component="resource.visibility === 'HIDDEN' ? EyeOutline : EyeOffOutline" />
+                      </template>
+                      {{ resource.visibility === 'HIDDEN' ? '恢复可见' : '隐藏' }}
+                    </NButton>
+                    <NButton size="tiny" quaternary type="error" @click.stop="handleDeleteResource(resource)">
+                      <template #icon><NIcon :component="TrashOutline" /></template>
+                      删除
+                    </NButton>
+                  </NSpace>
+                  <div class="muted time">{{ formatDate(resource.createdAt) }}</div>
+                </div>
+              </div>
+            </div>
+          </NSpin>
+        </div>
+      </template>
+    </NSpin>
+
+    <NModal
+      v-model:show="friendRequestVisible"
+      preset="card"
+      title="添加好友"
+      style="width: min(420px, 92vw)"
+      :bordered="false"
+    >
+      <NInput
+        v-model:value="friendRequestMessage"
+        type="textarea"
+        :rows="3"
+        placeholder="请输入申请说明（可选）..."
+      />
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="friendRequestVisible = false">取消</NButton>
+          <NButton type="primary" @click="confirmAddFriend">发送</NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <NModal
+      v-model:show="reportDialogVisible"
+      preset="card"
+      title="举报用户"
+      style="width: min(500px, 92vw)"
+      :bordered="false"
+    >
+      <NInput
+        v-model:value="reportReason"
         type="textarea"
         :rows="4"
         placeholder="请输入举报原因"
         maxlength="500"
-        show-word-limit
+        show-count
       />
       <template #footer>
-        <el-button @click="reportDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmReport">提交举报</el-button>
+        <NSpace justify="end">
+          <NButton @click="reportDialogVisible = false">取消</NButton>
+          <NButton type="primary" @click="confirmReport">提交举报</NButton>
+        </NSpace>
       </template>
-    </el-dialog>
+    </NModal>
 
-    <el-dialog v-model="punishmentDialogVisible" title="处罚用户" width="600px">
-      <el-form label-width="120px">
-        <el-form-item label="处罚类型" required>
-          <el-select v-model="punishmentType" placeholder="选择处罚类型" style="width: 100%">
-            <el-option label="警告" value="WARNING" />
-            <el-option label="禁言" value="MUTE" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="处罚时长(天)">
-          <el-input-number
-            v-model="punishmentDuration"
+    <NModal
+      v-model:show="punishmentDialogVisible"
+      preset="card"
+      title="处罚用户"
+      style="width: min(560px, 92vw)"
+      :bordered="false"
+    >
+      <NForm label-placement="top">
+        <NFormItem label="处罚类型" required>
+          <NSelect
+            v-model:value="punishmentType"
+            :options="punishmentOptions"
+            placeholder="选择处罚类型"
+          />
+        </NFormItem>
+        <NFormItem label="处罚时长(天)">
+          <NInputNumber
+            v-model:value="punishmentDuration"
             :min="1"
             :max="365"
             placeholder="留空为永久"
             style="width: 100%"
           />
-        </el-form-item>
-        <el-form-item label="处罚原因">
-          <el-input
-            v-model="punishmentReason"
+        </NFormItem>
+        <NFormItem label="处罚原因">
+          <NInput
+            v-model:value="punishmentReason"
             type="textarea"
             :rows="3"
             placeholder="请输入处罚原因（可选）"
             maxlength="500"
-            show-word-limit
+            show-count
           />
-        </el-form-item>
-      </el-form>
+        </NFormItem>
+      </NForm>
       <template #footer>
-        <el-button @click="punishmentDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="confirmPunish">确定</el-button>
+        <NSpace justify="end">
+          <NButton @click="punishmentDialogVisible = false">取消</NButton>
+          <NButton type="primary" :loading="submitting" @click="confirmPunish">确定</NButton>
+        </NSpace>
       </template>
-    </el-dialog>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.user-home-page {
-  max-width: 1400px;
+.page {
+  max-width: 980px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
+  width: 100%;
+  padding: clamp(12px, 2vw, 24px);
   box-sizing: border-box;
-}
-
-.profile-card {
-  margin-bottom: 24px;
-}
-
-.profile-header {
-  display: flex;
-  gap: 32px;
-  align-items: flex-start;
-}
-
-.avatar-section {
-  flex-shrink: 0;
-}
-
-.user-avatar {
-  border: 4px solid #f0f0f0;
-}
-
-.info-section {
-  flex: 1;
-}
-
-.user-name {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0 0 16px 0;
-  color: #1f2937;
-}
-
-.user-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 24px;
-  color: #6b7280;
-}
-
-.meta-item {
-  font-size: 14px;
-}
-
-.stats-section {
-  display: flex;
-  gap: 32px;
-}
-
-.stat-item {
   display: flex;
   flex-direction: column;
+  gap: 16px;
+}
+
+.profile {
+  display: flex;
+  gap: 24px;
   align-items: center;
+  padding: 24px;
+  flex-wrap: wrap;
+}
+
+.profile-info {
+  flex: 1;
+  min-width: 200px;
+}
+
+.name {
+  margin: 0 0 10px;
+  font-size: clamp(22px, 3vw, 28px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.stat-pill {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+  border-radius: var(--m-radius-sm);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--m-stroke);
 }
 
 .stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #667eea;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--m-sage-deep);
 }
 
-.stat-label {
-  font-size: 13px;
-  color: #6b7280;
-  margin-top: 4px;
-}
-
-.action-section {
+.actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-width: 120px;
+  gap: 10px;
+  min-width: 140px;
 }
 
-.resources-card {
-  margin-bottom: 24px;
+.resources-panel {
+  padding: 20px 22px;
 }
 
-.empty-resources {
-  text-align: center;
-  padding: 40px;
-  color: #9ca3af;
+.section-title {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 600;
 }
 
-.resources-list {
+.resources {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .resource-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.3s ease;
+  gap: 14px;
+  padding: 14px 16px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
 .resource-item:hover {
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
-  transform: translateY(-2px);
+  border-color: rgba(122, 158, 142, 0.35);
+  transform: translateY(-1px);
 }
 
-.resource-icon {
-  font-size: 32px;
-  color: #667eea;
+.res-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(122, 158, 142, 0.16);
+  color: var(--m-sage-deep);
   flex-shrink: 0;
 }
 
-.resource-info {
+.res-info {
   flex: 1;
   min-width: 0;
   cursor: pointer;
 }
 
-.resource-title {
-  font-size: 16px;
+.res-title {
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
-.resource-meta {
+.res-meta {
   display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: #6b7280;
+  gap: 14px;
+  font-size: 12px;
 }
 
-.resource-right {
+.res-admin {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-shrink: 0;
   flex-direction: column;
   align-items: flex-end;
-}
-
-.resource-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.resource-actions :deep(.el-button) {
-  height: 28px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
+  gap: 6px;
   flex-shrink: 0;
 }
 
-.resource-actions :deep(.el-button__icon) {
-  margin-right: 4px;
-  display: inline-flex;
-  align-items: center;
-}
-
-.resource-actions :deep(.el-button:first-child) {
-  min-width: 60px;
-  width: 60px;
-}
-
-.resource-actions :deep(.el-button:nth-child(2)) {
-  min-width: 90px;
-  width: 90px;
-}
-
-.resource-time {
+.time {
   font-size: 12px;
-  color: #9ca3af;
-  margin-top: 4px;
 }
 
 @media (max-width: 768px) {
-  .profile-header {
+  .profile {
     flex-direction: column;
     align-items: center;
     text-align: center;
   }
 
-  .action-section {
+  .meta {
+    justify-content: center;
+  }
+
+  .actions {
     width: 100%;
+  }
+
+  .resource-item {
+    flex-wrap: wrap;
+  }
+
+  .res-admin {
+    width: 100%;
+    align-items: flex-start;
   }
 }
 </style>
-

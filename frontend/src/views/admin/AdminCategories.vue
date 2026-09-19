@@ -1,9 +1,23 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, Folder } from '@element-plus/icons-vue'
+import {
+  NButton,
+  NInput,
+  NModal,
+  NForm,
+  NFormItem,
+  NSpace,
+  NEmpty,
+  NSpin,
+  NCheckbox,
+  NIcon,
+  NInputNumber,
+} from 'naive-ui'
+import { AddOutline, CreateOutline, TrashOutline, FolderOutline } from '@vicons/ionicons5'
 import request from '../../api/request'
 import type { Category } from '../../api/category'
+import PageHeader from '../../components/PageHeader.vue'
+import { message, dialog } from '../../utils/feedback'
 
 const list = ref<Category[]>([])
 const loading = ref(false)
@@ -23,7 +37,7 @@ async function load() {
     const res = await request.get<{ success: boolean; data: Category[] }>('/categories')
     list.value = res.data
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '加载分类列表失败')
+    message.error(e?.response?.data?.message || '加载分类列表失败')
   } finally {
     loading.value = false
   }
@@ -45,39 +59,40 @@ function openEdit(row: Category) {
 
 async function handleSubmit() {
   if (!form.name) {
-    ElMessage.warning('请输入分类名称')
+    message.warning('请输入分类名称')
     return
   }
-  if (editing.value) {
-    await request.put(`/categories/${editing.value.id}`, form)
-    ElMessage.success('修改成功')
-  } else {
-    await request.post('/categories', form)
-    ElMessage.success('创建成功')
-  }
-  dialogVisible.value = false
-  load()
-}
-
-async function handleDelete(row: Category) {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除分类"${row.name}"吗？删除后无法恢复。`,
-      '删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-      }
-    )
-    await request.delete(`/categories/${row.id}`)
-    ElMessage.success('删除成功')
+    if (editing.value) {
+      await request.put(`/categories/${editing.value.id}`, form)
+      message.success('修改成功')
+    } else {
+      await request.post('/categories', form)
+      message.success('创建成功')
+    }
+    dialogVisible.value = false
     load()
   } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
-    }
+    message.error(e?.response?.data?.message || '保存失败')
   }
+}
+
+function handleDelete(row: Category) {
+  dialog.warning({
+    title: '删除确认',
+    content: `确定要删除分类"${row.name}"吗？删除后无法恢复。`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await request.delete(`/categories/${row.id}`)
+        message.success('删除成功')
+        load()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '删除失败')
+      }
+    },
+  })
 }
 
 const sortedList = computed(() => {
@@ -91,215 +106,178 @@ const sortedList = computed(() => {
     if (typeof va === 'number' && typeof vb === 'number') {
       return (va - vb) * factor
     }
-    const sa = String(va ?? '')
-    const sb = String(vb ?? '')
-    return sa.localeCompare(sb) * factor
+    return String(va ?? '').localeCompare(String(vb ?? '')) * factor
   })
 })
 
 function toggleSelect(id: number) {
   const index = selectedCategories.value.indexOf(id)
-  if (index > -1) {
-    selectedCategories.value.splice(index, 1)
-  } else {
-    selectedCategories.value.push(id)
-  }
+  if (index > -1) selectedCategories.value.splice(index, 1)
+  else selectedCategories.value.push(id)
 }
 
 function toggleSelectAll() {
   if (selectedCategories.value.length === list.value.length) {
     selectedCategories.value = []
   } else {
-    selectedCategories.value = list.value.map(c => c.id)
+    selectedCategories.value = list.value.map((c) => c.id)
   }
 }
 
-async function handleBatchDelete() {
+function handleBatchDelete() {
   if (selectedCategories.value.length === 0) {
-    ElMessage.warning('请选择要删除的分类')
+    message.warning('请选择要删除的分类')
     return
   }
-  try {
-    await ElMessageBox.confirm(
-      `确定要删除选中的 ${selectedCategories.value.length} 个分类吗？`,
-      '删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+  dialog.warning({
+    title: '删除确认',
+    content: `确定要删除选中的 ${selectedCategories.value.length} 个分类吗？`,
+    positiveText: '确定',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        for (const id of selectedCategories.value) {
+          await request.delete(`/categories/${id}`)
+        }
+        message.success('删除成功')
+        selectedCategories.value = []
+        load()
+      } catch (e: any) {
+        message.error(e?.response?.data?.message || '删除失败')
       }
-    )
-    for (const id of selectedCategories.value) {
-      await request.delete(`/categories/${id}`)
-    }
-    ElMessage.success('删除成功')
-    selectedCategories.value = []
-    load()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
-    }
-  }
+    },
+  })
 }
 
 onMounted(load)
 </script>
 
 <template>
-  <div class="admin-categories-page">
-    <el-card class="categories-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <h3>分类管理</h3>
-            <p class="card-subtitle">管理平台所有资料分类</p>
-          </div>
-          <div class="search-bar">
-            <el-button
-              v-if="selectedCategories.length > 0"
-              type="danger"
-              @click="handleBatchDelete"
-            >
-              批量删除 ({{ selectedCategories.length }})
-            </el-button>
-            <el-button type="primary" :icon="Plus" @click="openCreate" class="add-category-btn">新增分类</el-button>
-          </div>
-        </div>
+  <div class="page">
+    <PageHeader title="分类管理" subtitle="管理平台所有资料分类" :show-back="false">
+      <template #extra>
+        <NButton type="primary" @click="openCreate">
+          <template #icon>
+            <NIcon :component="AddOutline" />
+          </template>
+          新增分类
+        </NButton>
       </template>
+    </PageHeader>
 
-      <div v-loading="loading">
-        <div v-if="list.length === 0" class="empty-categories">
-          <el-empty description="暂无分类" />
+    <div class="glass-panel toolbar">
+      <NButton
+        v-if="selectedCategories.length > 0"
+        type="error"
+        secondary
+        @click="handleBatchDelete"
+      >
+        批量删除 ({{ selectedCategories.length }})
+      </NButton>
+      <span v-else class="muted">选择分类后可批量删除</span>
+    </div>
+
+    <div class="glass-panel table-wrap">
+      <NSpin :show="loading">
+        <div v-if="list.length === 0" class="empty-wrap">
+          <NEmpty description="暂无分类" />
         </div>
-        <div v-else class="categories-list">
+        <div v-else class="item-list">
           <div class="list-header">
-            <el-checkbox
-              :model-value="selectedCategories.length === list.length && list.length > 0"
-              @change="toggleSelectAll"
-              class="select-all-checkbox"
+            <NCheckbox
+              :checked="selectedCategories.length === list.length && list.length > 0"
+              :indeterminate="
+                selectedCategories.length > 0 && selectedCategories.length < list.length
+              "
+              @update:checked="toggleSelectAll"
             />
-            <span class="list-header-text">全选</span>
+            <span class="muted">全选</span>
           </div>
-          <div v-for="category in sortedList" :key="category.id" class="category-item">
-            <el-checkbox
-              :model-value="selectedCategories.includes(category.id)"
-              @change="toggleSelect(category.id)"
-              class="category-checkbox"
+          <div v-for="category in sortedList" :key="category.id" class="surface-card list-item">
+            <NCheckbox
+              :checked="selectedCategories.includes(category.id)"
+              @update:checked="() => toggleSelect(category.id)"
             />
-            <div class="category-icon-wrapper">
-              <el-icon class="category-icon"><Folder /></el-icon>
+            <div class="icon-wrap">
+              <NIcon :component="FolderOutline" :size="24" />
             </div>
-            <div class="category-info">
-              <div class="category-title">
-                {{ category.name }}
-              </div>
-              <div class="category-meta">
+            <div class="item-info">
+              <div class="item-title">{{ category.name }}</div>
+              <div class="item-meta muted">
                 <span>排序：{{ category.sortOrder || 1 }}</span>
               </div>
             </div>
-            <div class="category-right">
-              <div class="category-actions">
-                <el-button
-                  size="small"
-                  text
-                  type="info"
-                  :icon="Edit"
-                  @click.stop="openEdit(category)"
-                >
+            <div class="item-right">
+              <NSpace :size="8">
+                <NButton size="small" quaternary @click="openEdit(category)">
+                  <template #icon>
+                    <NIcon :component="CreateOutline" />
+                  </template>
                   编辑
-                </el-button>
-                <el-button
-                  size="small"
-                  text
-                  type="danger"
-                  :icon="Delete"
-                  @click.stop="handleDelete(category)"
-                >
+                </NButton>
+                <NButton size="small" quaternary type="error" @click="handleDelete(category)">
+                  <template #icon>
+                    <NIcon :component="TrashOutline" />
+                  </template>
                   删除
-                </el-button>
-              </div>
+                </NButton>
+              </NSpace>
             </div>
           </div>
         </div>
-      </div>
+      </NSpin>
+    </div>
 
-    <el-dialog v-model="dialogVisible" :title="editing ? '编辑分类' : '新增分类'" width="400px">
-      <el-form label-width="80px">
-        <el-form-item label="名称">
-          <el-input v-model="form.name" />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="form.sortOrder" :min="1" />
-        </el-form-item>
-      </el-form>
+    <NModal
+      v-model:show="dialogVisible"
+      preset="card"
+      :title="editing ? '编辑分类' : '新增分类'"
+      style="width: 420px; max-width: 94vw"
+      :bordered="false"
+    >
+      <NForm label-placement="left" label-width="80">
+        <NFormItem label="名称">
+          <NInput v-model:value="form.name" placeholder="请输入分类名称" />
+        </NFormItem>
+        <NFormItem label="排序">
+          <NInputNumber v-model:value="form.sortOrder" :min="1" style="width: 100%" />
+        </NFormItem>
+      </NForm>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmit">保存</el-button>
+        <NSpace justify="end">
+          <NButton @click="dialogVisible = false">取消</NButton>
+          <NButton type="primary" @click="handleSubmit">保存</NButton>
+        </NSpace>
       </template>
-    </el-dialog>
-    </el-card>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
-.admin-categories-page {
+.page {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px;
-  min-height: calc(100vh - 140px);
-  box-sizing: border-box;
 }
 
-.categories-card {
-  margin-bottom: 24px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-}
-
-.header-left h3 {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-  color: #1f2937;
-}
-
-.card-subtitle {
-  margin: 0;
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.search-bar {
+.toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  min-height: 56px;
 }
 
-.add-category-btn {
-  border-radius: 10px;
-  height: 40px !important;
-  min-height: 40px !important;
-  max-height: 40px !important;
-  padding: 0 20px;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.table-wrap {
+  padding: 16px 20px 20px;
 }
 
-.empty-categories {
-  padding: 40px;
-  text-align: center;
+.empty-wrap {
+  padding: 48px 0;
 }
 
-.categories-list {
+.item-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -309,135 +287,64 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  margin-bottom: 4px;
+  padding: 8px 12px;
+  border-radius: var(--m-radius-sm);
+  background: rgba(255, 255, 255, 0.35);
 }
 
-.select-all-checkbox {
-  flex-shrink: 0;
-}
-
-.list-header-text {
-  font-size: 14px;
-  color: #6b7280;
-}
-
-.category-item {
+.list-item {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  transition: all 0.2s;
+  gap: 14px;
+  padding: 14px 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.category-item:hover {
-  background: #f9fafb;
-  border-color: #667eea;
+.list-item:hover {
+  border-color: rgba(122, 158, 142, 0.35);
+  box-shadow: var(--m-shadow-soft);
 }
 
-.category-checkbox {
-  flex-shrink: 0;
-}
-
-.category-icon-wrapper {
+.icon-wrap {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  border-radius: 14px;
+  background: linear-gradient(145deg, var(--m-peach), var(--m-sage));
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(250, 112, 154, 0.25);
 }
 
-.category-icon {
-  font-size: 24px;
-  color: #ffffff;
-}
-
-.category-info {
+.item-info {
   flex: 1;
   min-width: 0;
 }
 
-.category-title {
+.item-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1f2937;
+  color: var(--m-ink);
   margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
-.category-meta {
+.item-meta {
   font-size: 13px;
-  color: #6b7280;
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
 }
 
-.category-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.item-right {
   flex-shrink: 0;
-}
-
-.category-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.category-actions :deep(.el-button) {
-  height: 28px;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.category-actions :deep(.el-button__icon) {
-  margin-right: 4px;
-  display: inline-flex;
-  align-items: center;
 }
 
 @media (max-width: 768px) {
-  .card-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .search-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-bar > * {
-    width: 100%;
-  }
-
-  .category-item {
+  .list-item {
     flex-wrap: wrap;
   }
 
-  .category-right {
+  .item-right {
     width: 100%;
-    justify-content: space-between;
-    margin-top: 8px;
+    margin-top: 4px;
   }
 }
 </style>
-
-
