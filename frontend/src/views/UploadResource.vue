@@ -22,6 +22,7 @@ import {
 import { fetchCategories, type Category } from '../api/category'
 import { createResource, uploadFile, updateResource, fetchResourceDetail } from '../api/resource'
 import { message } from '../utils/feedback'
+import { resolveResourceTitle } from '../utils/resource'
 import PageHeader from '../components/PageHeader.vue'
 
 const route = useRoute()
@@ -95,8 +96,8 @@ async function loadResource(id: number) {
 }
 
 async function handleSubmit() {
-  if (!form.title || !form.categoryId) {
-    message.warning('请填写标题和选择分类')
+  if (!form.categoryId) {
+    message.warning('请选择分类')
     return
   }
 
@@ -105,14 +106,6 @@ async function handleSubmit() {
     const hasDesc = !!form.description
     if (!hasFile && !hasDesc) {
       message.warning('请上传文件或填写资料说明')
-      return
-    }
-
-    if (form.categoryId == null && categories.value.length > 0) {
-      form.categoryId = categories.value[0]!.id
-    }
-    if (!form.categoryId) {
-      message.warning('请选择分类')
       return
     }
   }
@@ -126,14 +119,12 @@ async function handleSubmit() {
       uploading.value = false
     }
 
+    const title = resolveResourceTitle(form.title, fileName.value)
+
     if (!isEditMode.value) {
-      if (!form.title) {
-        form.title = fileName.value || '未命名资料'
-      }
-      const categoryId = form.categoryId!
       await createResource({
-        title: form.title,
-        categoryId,
+        title,
+        categoryId: form.categoryId,
         description: form.description || '',
         fileUrl: form.fileUrl,
         allowDownload: form.allowDownload,
@@ -151,7 +142,7 @@ async function handleSubmit() {
       fileChanged.value = false
     } else {
       const updateData: any = {
-        title: form.title,
+        title,
         categoryId: form.categoryId,
         description: form.description || '',
         allowDownload: form.allowDownload,
@@ -195,12 +186,12 @@ onMounted(async () => {
 
     <div class="glass-panel form-panel">
       <NForm label-placement="top">
-        <NFormItem :label="isEditMode ? '资料标题' : '资料标题'" :required="isEditMode">
+        <NFormItem label="资料标题">
           <NInput
             v-model:value="form.title"
             maxlength="100"
             show-count
-            placeholder="请输入资料标题"
+            placeholder="可不填，默认用文件名"
           />
         </NFormItem>
         <NFormItem label="分类" required>

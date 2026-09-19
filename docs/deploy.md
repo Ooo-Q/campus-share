@@ -102,6 +102,7 @@ docker compose up -d
 |------|----------|------|
 | 初始化脚本 | `db/campus_share.sql` | 仅在 MySQL 数据卷首次为空时执行 |
 | 业务数据 | Docker Volume（如 `mysql_data`） | 持久化数据库文件 |
+| Redis 缓存 | Docker Volume（`redis_data`） | 缓存数据，可重建 |
 | 上传文件 | `uploads/` | 挂载至后端容器 `/app/uploads` |
 
 ## 9. 常用命令

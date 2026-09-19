@@ -32,6 +32,20 @@ export function getAvatarUrl(avatar?: string | null): string | undefined {
   return value.startsWith('/') ? `/api${value}` : `/api/${value}`
 }
 
+const STORED_OBJECT_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Blank titles fall back to the original filename, then a default label. */
+export function resolveResourceTitle(title: string, fileName?: string | null): string {
+  const trimmed = title.trim()
+  if (trimmed) return trimmed.slice(0, 100)
+
+  const name = (fileName || '').trim()
+  const base = name.replace(/\.[^.]+$/, '')
+  if (name && !STORED_OBJECT_NAME.test(base)) return name.slice(0, 100)
+
+  return '未命名资料'
+}
+
 export async function downloadResource(
   resource: Resource,
   options?: {

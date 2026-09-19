@@ -31,6 +31,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ResourceServiceImpl implements ResourceService {
 
+    private static final String DEFAULT_RESOURCE_TITLE = "未命名资料";
+    private static final java.util.regex.Pattern STORED_OBJECT_NAME = java.util.regex.Pattern.compile(
+            "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    );
+
     private final ResourceMapper resourceMapper;
     private final ResourceCategoryMapper categoryMapper;
     private final ResourceFavoriteMapper favoriteMapper;
@@ -39,6 +44,38 @@ public class ResourceServiceImpl implements ResourceService {
     private final ResourceCommentMapper commentMapper;
     private final UserPunishmentMapper punishmentMapper;
     private final FileStorageService fileStorageService;
+
+    private String resolveTitle(String title, String fileUrl) {
+        if (title != null && !title.isBlank()) {
+            String trimmed = title.trim();
+            return trimmed.length() > 200 ? trimmed.substring(0, 200) : trimmed;
+        }
+        String name = extractFileName(fileUrl);
+        if (name != null && !isGeneratedFileName(name)) {
+            return name.length() > 200 ? name.substring(0, 200) : name;
+        }
+        return DEFAULT_RESOURCE_TITLE;
+    }
+
+    private String extractFileName(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            return null;
+        }
+        String path = fileUrl;
+        int query = path.indexOf('?');
+        if (query >= 0) {
+            path = path.substring(0, query);
+        }
+        int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        String name = slash >= 0 ? path.substring(slash + 1) : path;
+        return name.isBlank() ? null : name;
+    }
+
+    private boolean isGeneratedFileName(String name) {
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        return STORED_OBJECT_NAME.matcher(base).matches();
+    }
 
     @Override
     @Cacheable(
@@ -86,7 +123,7 @@ public class ResourceServiceImpl implements ResourceService {
         String safeFileUrl = request.getFileUrl() == null ? "" : request.getFileUrl();
 
         Resource resource = new Resource();
-        resource.setTitle(request.getTitle());
+        resource.setTitle(resolveTitle(request.getTitle(), safeFileUrl));
         resource.setCategoryId(request.getCategoryId());
         resource.setDescription(request.getDescription());
         resource.setFileUrl(safeFileUrl);
@@ -120,7 +157,8 @@ public class ResourceServiceImpl implements ResourceService {
             throw new BusinessException("分类不存在");
         }
 
-        resource.setTitle(request.getTitle());
+        String fileUrlForTitle = request.getFileUrl() != null ? request.getFileUrl() : resource.getFileUrl();
+        resource.setTitle(resolveTitle(request.getTitle(), fileUrlForTitle));
         resource.setCategoryId(request.getCategoryId());
         resource.setDescription(request.getDescription());
 

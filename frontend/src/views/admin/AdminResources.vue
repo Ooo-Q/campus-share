@@ -39,6 +39,7 @@ import type { PageResponse } from '../../api/resource'
 import { createResourcePunishment } from '../../api/punishment'
 import PageHeader from '../../components/PageHeader.vue'
 import { message, dialog } from '../../utils/feedback'
+import { resolveResourceTitle } from '../../utils/resource'
 
 interface ResourceItem {
   id: number
@@ -201,15 +202,15 @@ function handleRemoveFile() {
 }
 
 async function handleSubmitEdit() {
-  if (!editForm.title || !editForm.categoryId) {
-    message.warning('请填写标题和选择分类')
+  if (!editForm.categoryId) {
+    message.warning('请选择分类')
     return
   }
 
   editSaving.value = true
   try {
     const updateData: any = {
-      title: editForm.title,
+      title: resolveResourceTitle(editForm.title, editFileName.value),
       categoryId: editForm.categoryId,
       description: editForm.description || '',
       allowDownload: editForm.allowDownload,
@@ -465,12 +466,12 @@ onMounted(() => {
       :bordered="false"
     >
       <NForm label-placement="left" label-width="90">
-        <NFormItem label="资料标题" required>
+        <NFormItem label="资料标题">
           <NInput
             v-model:value="editForm.title"
             maxlength="100"
             show-count
-            placeholder="请输入资料标题"
+            placeholder="可不填，默认用文件名"
           />
         </NFormItem>
         <NFormItem label="分类" required>
